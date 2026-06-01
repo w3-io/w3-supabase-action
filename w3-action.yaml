@@ -1,0 +1,96 @@
+# TODO: This file describes your action for the W3 MCP server.
+# AI agents use this to discover your action, understand its commands,
+# and generate correct workflow YAML. Keep it in sync with action.yml.
+#
+# On release, this file is synced to the MCP's registry.yaml.
+
+kind: integration # integration | primitive | utility
+partner: yourpartner # TODO: machine-readable partner ID
+name: YourPartner Integration # TODO: human-readable name
+version: 1.0.0
+repo: w3-io/w3-yourpartner-action # TODO: your repo
+
+description: > # TODO: replace with a short description of what this action does.
+  TODO — Short summary of what your action does, who its end users
+  are, and what the core capabilities are. AI agents read this when
+  recommending the action.
+
+context: > # TODO: replace with a longer note about when to use this action.
+  TODO — Longer note for AI agents about when to choose this action
+  over alternatives. Cover: the kinds of workflows this action belongs
+  in, what makes it the right choice vs. similar partner actions, any
+  hard requirements (secrets, KYC, allowlists), and any common pitfalls
+  authors hit when wiring it up. ~3–5 sentences.
+
+commands:
+  # TODO: Define each command your action supports. Example:
+  #
+  # - name: inspect
+  #   description: >
+  #     Risk assessment for a blockchain address. Returns per-chain
+  #     scores for fraud, compliance, and cyber risk.
+  #   inputs:
+  #     address:
+  #       type: string
+  #       required: true
+  #       description: Blockchain address to inspect
+  #     chain-id:
+  #       type: string
+  #       required: false
+  #       description: Filter to a specific chain
+  #   outputs:
+  #     result:
+  #       type: object
+  #       description: Full risk score breakdown
+
+  - name: example-command
+    description: TODO - describe what this command does
+    inputs:
+      input:
+        type: string
+        required: true
+        description: TODO - describe this input
+    outputs:
+      result:
+        type: object
+        description: TODO - describe the output shape
+
+# ── Display metadata (optional but recommended) ──────────────────────
+#
+# OPTIONAL: Adding a `display:` block makes your action render with
+# branded cards in the W3 Explorer, AI chat, and other W3 UIs. Without
+# it, your action's steps render via the renderer's generic widget for
+# their syscall kind (still works, just unbranded).
+#
+# Canonical schema: docs/display-schema.md
+# JSON Schema:      schemas/display.schema.json
+#
+# Templating syntax: {{ path.to.value | filter | filter2 }}
+# Context: { inputs: <your action input map>, outputs: <your output map>, step: <step meta> }
+#
+# Available filters (defined by the renderer, not by you):
+#   truncate_addr, chain_pretty, default:"x", length, format_rate,
+#   format_usdc_base, format_usdc_whole,
+#   decode_calldata_action, decode_calldata_amount_usdc, decode_calldata_spender,
+#   known_contract_name, known_contract_short, known_contract_brand
+#
+# display:
+#   brand:
+#     name: "Your Partner Name"
+#     short_name: "Partner"
+#     description: "One-line tagline"
+#     logo: "https://raw.githubusercontent.com/w3-io/w3-yourpartner-action/main/assets/logo.svg"
+#     color: "#3B82F6"
+#
+#   commands:
+#     example-command:
+#       icon: "info"                # named icon — renderer picks from: lock|vault|check|send|redeem|info|chart
+#       title_template: "Action: {{ inputs.input }}"
+#       subtitle_template: "subtitle goes here"
+#       summary:
+#         - { label: "Input",  value: "{{ inputs.input }}" }
+#         - { label: "Result", value: "{{ outputs.result.field | default: '—' }}" }
+#       tx_hash_path: "outputs.result.txHash"     # optional; for on-chain ops
+#       chain_explorer:                            # optional; auto-wired by tx_hash_path
+#         ethereum: "https://etherscan.io/tx/{{tx_hash}}"
+#         base:     "https://basescan.org/tx/{{tx_hash}}"
