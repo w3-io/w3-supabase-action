@@ -24,7 +24,7 @@ jobs:
     outputs:
       run_id: ${{ steps.start.outputs.run_id }}
     steps:
-      - name: "Audit: workflow started"
+      - name: 'Audit: workflow started'
         id: start
         uses: w3-io/w3-supabase-action@v1
         with:
@@ -48,7 +48,7 @@ jobs:
       - name: Do the work
         run: sleep 5
 
-      - name: "Audit: workflow completed"
+      - name: 'Audit: workflow completed'
         if: success()
         uses: w3-io/w3-supabase-action@v1
         with:
@@ -60,7 +60,7 @@ jobs:
           data: |
             { "status": "completed", "completed_at": "now()" }
 
-      - name: "Audit: workflow failed"
+      - name: 'Audit: workflow failed'
         if: failure()
         uses: w3-io/w3-supabase-action@v1
         with:
