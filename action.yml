@@ -1,6 +1,6 @@
-name: "W3 Supabase Action"
-description: "Supabase integration for W3 workflows: Postgres queries, Auth, Storage, Edge Functions"
-author: "w3-io"
+name: 'W3 Supabase Action'
+description: 'Supabase integration for W3 workflows: Postgres queries, Auth, Storage, Edge Functions'
+author: 'w3-io'
 
 inputs:
   # ───── Core ─────
@@ -14,7 +14,7 @@ inputs:
       Functions: invoke-function.
     required: true
   url:
-    description: "Supabase project URL (e.g. https://abcdefghij.supabase.co)"
+    description: 'Supabase project URL (e.g. https://abcdefghij.supabase.co)'
     required: true
   key:
     description: >
@@ -23,124 +23,124 @@ inputs:
       for client-style auth flows (sign-up, sign-in, etc.).
     required: true
   key-type:
-    description: "Type of key being used: service-role (default) or anon."
+    description: 'Type of key being used: service-role (default) or anon.'
     required: false
-    default: "service-role"
+    default: 'service-role'
 
   # ───── Database ─────
   table:
-    description: "Table name (for query, insert, upsert, update, delete, count)"
+    description: 'Table name (for query, insert, upsert, update, delete, count)'
     required: false
-    default: ""
+    default: ''
   schema:
-    description: "Postgres schema (default: public)"
+    description: 'Postgres schema (default: public)'
     required: false
-    default: "public"
+    default: 'public'
   filter:
     description: >
       PostgREST filter as JSON. Example: {"id":{"eq":5}} or
       {"status":{"in":["pending","active"]},"created_at":{"gte":"2026-01-01"}}.
       Supported operators: eq, neq, gt, gte, lt, lte, like, ilike, is, in, contains, containedBy.
     required: false
-    default: "{}"
+    default: '{}'
   select:
     description: 'Columns to return (PostgREST select, default "*"). Example: "id,name,profile(name)"'
     required: false
-    default: "*"
+    default: '*'
   order:
     description: 'Order spec as JSON. Example: [{"column":"created_at","ascending":false}]'
     required: false
-    default: ""
+    default: ''
   limit:
-    description: "Maximum rows to return"
+    description: 'Maximum rows to return'
     required: false
-    default: ""
+    default: ''
   offset:
-    description: "Rows to skip"
+    description: 'Rows to skip'
     required: false
-    default: ""
+    default: ''
   data:
-    description: "Row(s) to insert/upsert/update as JSON (single object or array of objects)"
+    description: 'Row(s) to insert/upsert/update as JSON (single object or array of objects)'
     required: false
-    default: ""
+    default: ''
   on-conflict:
-    description: "Column(s) for upsert conflict resolution. Example: id or email"
+    description: 'Column(s) for upsert conflict resolution. Example: id or email'
     required: false
-    default: ""
+    default: ''
   return-rows:
-    description: "Return the affected rows after insert/upsert/update/delete (default: true)"
+    description: 'Return the affected rows after insert/upsert/update/delete (default: true)'
     required: false
-    default: "true"
+    default: 'true'
   rpc-name:
-    description: "Stored procedure / function name (for rpc command)"
+    description: 'Stored procedure / function name (for rpc command)'
     required: false
-    default: ""
+    default: ''
   rpc-params:
-    description: "Stored procedure parameters as JSON object"
+    description: 'Stored procedure parameters as JSON object'
     required: false
-    default: "{}"
+    default: '{}'
 
   # ───── Auth ─────
   email:
-    description: "User email (for auth-sign-up, auth-sign-in-password, auth-sign-in-otp, auth-reset-password)"
+    description: 'User email (for auth-sign-up, auth-sign-in-password, auth-sign-in-otp, auth-reset-password)'
     required: false
-    default: ""
+    default: ''
   password:
-    description: "User password (for auth-sign-up, auth-sign-in-password)"
+    description: 'User password (for auth-sign-up, auth-sign-in-password)'
     required: false
-    default: ""
+    default: ''
   user-metadata:
-    description: "User metadata as JSON (for auth-sign-up, auth-update-user)"
+    description: 'User metadata as JSON (for auth-sign-up, auth-update-user)'
     required: false
-    default: "{}"
+    default: '{}'
   jwt:
-    description: "JWT token (for auth-verify-jwt, auth-get-user, auth-sign-out, auth-update-user)"
+    description: 'JWT token (for auth-verify-jwt, auth-get-user, auth-sign-out, auth-update-user)'
     required: false
-    default: ""
+    default: ''
   redirect-to:
-    description: "Redirect URL for OTP / password reset emails"
+    description: 'Redirect URL for OTP / password reset emails'
     required: false
-    default: ""
+    default: ''
 
   # ───── Storage ─────
   bucket:
-    description: "Storage bucket name"
+    description: 'Storage bucket name'
     required: false
-    default: ""
+    default: ''
   path:
-    description: "File path within bucket (e.g. user-123/avatar.png)"
+    description: 'File path within bucket (e.g. user-123/avatar.png)'
     required: false
-    default: ""
+    default: ''
   file-content:
-    description: "File content as base64-encoded string (for storage-upload)"
+    description: 'File content as base64-encoded string (for storage-upload)'
     required: false
-    default: ""
+    default: ''
   content-type:
     description: 'MIME type of uploaded file (default: "application/octet-stream")'
     required: false
-    default: "application/octet-stream"
+    default: 'application/octet-stream'
   destination-path:
-    description: "Destination path (for storage-move, storage-copy)"
+    description: 'Destination path (for storage-move, storage-copy)'
     required: false
-    default: ""
+    default: ''
   expires-in:
-    description: "Signed URL TTL in seconds (default: 3600)"
+    description: 'Signed URL TTL in seconds (default: 3600)'
     required: false
-    default: "3600"
+    default: '3600'
 
   # ───── Functions ─────
   function-name:
-    description: "Edge Function name (for invoke-function)"
+    description: 'Edge Function name (for invoke-function)'
     required: false
-    default: ""
+    default: ''
   function-body:
-    description: "JSON body to POST to the Edge Function"
+    description: 'JSON body to POST to the Edge Function'
     required: false
-    default: ""
+    default: ''
   function-headers:
-    description: "Custom headers as JSON object (for invoke-function)"
+    description: 'Custom headers as JSON object (for invoke-function)'
     required: false
-    default: "{}"
+    default: '{}'
 
 outputs:
   result:
@@ -152,5 +152,5 @@ outputs:
       invoke-function returns the function's response body.
 
 runs:
-  using: "node24"
-  main: "dist/index.js"
+  using: 'node24'
+  main: 'dist/index.js'

@@ -44,7 +44,10 @@ const handlers = {
     const result = await client.query({
       table: getString('table', { required: true }),
       schema: getString('schema', { defaultValue: 'public' }),
-      filter: parseJsonInput('filter', core.getInput('filter'), { allowEmpty: true, defaultValue: {} }),
+      filter: parseJsonInput('filter', core.getInput('filter'), {
+        allowEmpty: true,
+        defaultValue: {},
+      }),
       select: getString('select', { defaultValue: '*' }),
       order: parseJsonInput('order', core.getInput('order'), { allowEmpty: true }),
       limit: getString('limit'),
@@ -81,7 +84,10 @@ const handlers = {
     const result = await client.update({
       table: getString('table', { required: true }),
       schema: getString('schema', { defaultValue: 'public' }),
-      filter: parseJsonInput('filter', core.getInput('filter'), { allowEmpty: true, defaultValue: {} }),
+      filter: parseJsonInput('filter', core.getInput('filter'), {
+        allowEmpty: true,
+        defaultValue: {},
+      }),
       data: parseJsonInput('data', core.getInput('data')),
       returnRows: getBool('return-rows', true),
     })
@@ -93,7 +99,10 @@ const handlers = {
     const result = await client.delete({
       table: getString('table', { required: true }),
       schema: getString('schema', { defaultValue: 'public' }),
-      filter: parseJsonInput('filter', core.getInput('filter'), { allowEmpty: true, defaultValue: {} }),
+      filter: parseJsonInput('filter', core.getInput('filter'), {
+        allowEmpty: true,
+        defaultValue: {},
+      }),
       returnRows: getBool('return-rows', true),
     })
     setJsonOutput('result', result)
@@ -104,7 +113,10 @@ const handlers = {
     const result = await client.count({
       table: getString('table', { required: true }),
       schema: getString('schema', { defaultValue: 'public' }),
-      filter: parseJsonInput('filter', core.getInput('filter'), { allowEmpty: true, defaultValue: {} }),
+      filter: parseJsonInput('filter', core.getInput('filter'), {
+        allowEmpty: true,
+        defaultValue: {},
+      }),
     })
     setJsonOutput('result', result)
   },
@@ -114,7 +126,10 @@ const handlers = {
     const result = await client.rpc({
       schema: getString('schema', { defaultValue: 'public' }),
       name: getString('rpc-name', { required: true }),
-      params: parseJsonInput('rpc-params', core.getInput('rpc-params'), { allowEmpty: true, defaultValue: {} }),
+      params: parseJsonInput('rpc-params', core.getInput('rpc-params'), {
+        allowEmpty: true,
+        defaultValue: {},
+      }),
     })
     setJsonOutput('result', result)
   },

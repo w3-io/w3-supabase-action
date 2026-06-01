@@ -51907,14 +51907,20 @@ function translateError(err, fallbackCode = 'SUPABASE_ERROR') {
   if (code === '23503') return new SupabaseError('FOREIGN_KEY_VIOLATION', message, { details })
 
   // Auth errors
-  if (code === 'invalid_grant') return new SupabaseError('AUTH_INVALID_CREDENTIALS', message, { details })
-  if (code === 'user_not_found') return new SupabaseError('AUTH_USER_NOT_FOUND', message, { details })
-  if (code === 'email_not_confirmed') return new SupabaseError('AUTH_EMAIL_NOT_CONFIRMED', message, { details })
+  if (code === 'invalid_grant')
+    return new SupabaseError('AUTH_INVALID_CREDENTIALS', message, { details })
+  if (code === 'user_not_found')
+    return new SupabaseError('AUTH_USER_NOT_FOUND', message, { details })
+  if (code === 'email_not_confirmed')
+    return new SupabaseError('AUTH_EMAIL_NOT_CONFIRMED', message, { details })
 
   // HTTP-style
-  if (code === 401 || code === '401') return new SupabaseError('UNAUTHORIZED', message, { statusCode: 401, details })
-  if (code === 403 || code === '403') return new SupabaseError('FORBIDDEN', message, { statusCode: 403, details })
-  if (code === 404 || code === '404') return new SupabaseError('NOT_FOUND', message, { statusCode: 404, details })
+  if (code === 401 || code === '401')
+    return new SupabaseError('UNAUTHORIZED', message, { statusCode: 401, details })
+  if (code === 403 || code === '403')
+    return new SupabaseError('FORBIDDEN', message, { statusCode: 403, details })
+  if (code === 404 || code === '404')
+    return new SupabaseError('NOT_FOUND', message, { statusCode: 404, details })
 
   return new SupabaseError(fallbackCode, message, { details })
 }
@@ -51941,9 +51947,25 @@ function client_requireInput(name, value) {
 // Apply PostgREST filters to a query builder.
 //   filter = { id: { eq: 5 }, status: { in: ["a", "b"] }, created_at: { gte: "2026-01-01" } }
 const FILTER_OPS = new Set([
-  'eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'like', 'ilike',
-  'is', 'in', 'contains', 'containedBy', 'rangeGt', 'rangeGte',
-  'rangeLt', 'rangeLte', 'rangeAdjacent', 'overlaps', 'textSearch',
+  'eq',
+  'neq',
+  'gt',
+  'gte',
+  'lt',
+  'lte',
+  'like',
+  'ilike',
+  'is',
+  'in',
+  'contains',
+  'containedBy',
+  'rangeGt',
+  'rangeGte',
+  'rangeLt',
+  'rangeLte',
+  'rangeAdjacent',
+  'overlaps',
+  'textSearch',
 ])
 
 function applyFilter(query, filter) {
@@ -51957,7 +51979,7 @@ function applyFilter(query, filter) {
       if (!FILTER_OPS.has(op)) {
         throw new SupabaseError(
           'INVALID_FILTER',
-          `Unsupported filter operator '${op}' on column '${column}'. Allowed: ${Array.from(FILTER_OPS).join(', ')}`
+          `Unsupported filter operator '${op}' on column '${column}'. Allowed: ${Array.from(FILTER_OPS).join(', ')}`,
         )
       }
       query = query[op](column, value)
@@ -52035,7 +52057,7 @@ class SupabaseSdkClient {
     if (!filter || Object.keys(filter).length === 0) {
       throw new SupabaseError(
         'UNSAFE_UPDATE',
-        'update requires a non-empty filter. To update all rows intentionally, pass {"id":{"neq":null}} or similar.'
+        'update requires a non-empty filter. To update all rows intentionally, pass {"id":{"neq":null}} or similar.',
       )
     }
     let q = this.client.schema(schema).from(table).update(data)
@@ -52051,7 +52073,7 @@ class SupabaseSdkClient {
     if (!filter || Object.keys(filter).length === 0) {
       throw new SupabaseError(
         'UNSAFE_DELETE',
-        'delete requires a non-empty filter. To delete all rows intentionally, pass {"id":{"neq":null}} or similar.'
+        'delete requires a non-empty filter. To delete all rows intentionally, pass {"id":{"neq":null}} or similar.',
       )
     }
     let q = this.client.schema(schema).from(table).delete()
@@ -52064,10 +52086,7 @@ class SupabaseSdkClient {
 
   async count({ table, schema = 'public', filter }) {
     client_requireInput('table', table)
-    let q = this.client
-      .schema(schema)
-      .from(table)
-      .select('*', { count: 'exact', head: true })
+    let q = this.client.schema(schema).from(table).select('*', { count: 'exact', head: true })
     q = applyFilter(q, filter || {})
     const { count, error } = await q
     if (error) throw translateError(error, 'COUNT_FAILED')
@@ -52136,7 +52155,7 @@ class SupabaseSdkClient {
     if (!email && !password && (!userMetadata || Object.keys(userMetadata).length === 0)) {
       throw new SupabaseError(
         'NO_UPDATES',
-        'auth-update-user requires at least one of: email, password, user-metadata'
+        'auth-update-user requires at least one of: email, password, user-metadata',
       )
     }
     // Set the JWT on the client so updateUser updates the right user.
@@ -52183,12 +52202,10 @@ class SupabaseSdkClient {
     client_requireInput('path', path)
     client_requireInput('file-content', fileContentBase64)
     const bytes = external_node_buffer_namespaceObject.Buffer.from(fileContentBase64, 'base64')
-    const { data, error } = await this.client.storage
-      .from(bucket)
-      .upload(path, bytes, {
-        contentType: contentType || 'application/octet-stream',
-        upsert: true,
-      })
+    const { data, error } = await this.client.storage.from(bucket).upload(path, bytes, {
+      contentType: contentType || 'application/octet-stream',
+      upsert: true,
+    })
     if (error) throw translateError(error, 'STORAGE_UPLOAD_FAILED')
     return { path: data.path, fullPath: data.fullPath, id: data.id }
   }
@@ -52274,7 +52291,7 @@ class SupabaseSdkClient {
   }
 }
 
-// Helper used by main.js — accept raw input strings and build a typed args object.
+// Helpers — exported so tests and main.js can use them.
 
 
 ;// CONCATENATED MODULE: ./src/main.js
@@ -52324,7 +52341,10 @@ const handlers = {
     const result = await client.query({
       table: getString('table', { required: true }),
       schema: getString('schema', { defaultValue: 'public' }),
-      filter: client_parseJsonInput('filter', lib_core.getInput('filter'), { allowEmpty: true, defaultValue: {} }),
+      filter: client_parseJsonInput('filter', lib_core.getInput('filter'), {
+        allowEmpty: true,
+        defaultValue: {},
+      }),
       select: getString('select', { defaultValue: '*' }),
       order: client_parseJsonInput('order', lib_core.getInput('order'), { allowEmpty: true }),
       limit: getString('limit'),
@@ -52361,7 +52381,10 @@ const handlers = {
     const result = await client.update({
       table: getString('table', { required: true }),
       schema: getString('schema', { defaultValue: 'public' }),
-      filter: client_parseJsonInput('filter', lib_core.getInput('filter'), { allowEmpty: true, defaultValue: {} }),
+      filter: client_parseJsonInput('filter', lib_core.getInput('filter'), {
+        allowEmpty: true,
+        defaultValue: {},
+      }),
       data: client_parseJsonInput('data', lib_core.getInput('data')),
       returnRows: getBool('return-rows', true),
     })
@@ -52373,7 +52396,10 @@ const handlers = {
     const result = await client.delete({
       table: getString('table', { required: true }),
       schema: getString('schema', { defaultValue: 'public' }),
-      filter: client_parseJsonInput('filter', lib_core.getInput('filter'), { allowEmpty: true, defaultValue: {} }),
+      filter: client_parseJsonInput('filter', lib_core.getInput('filter'), {
+        allowEmpty: true,
+        defaultValue: {},
+      }),
       returnRows: getBool('return-rows', true),
     })
     setJsonOutput('result', result)
@@ -52384,7 +52410,10 @@ const handlers = {
     const result = await client.count({
       table: getString('table', { required: true }),
       schema: getString('schema', { defaultValue: 'public' }),
-      filter: client_parseJsonInput('filter', lib_core.getInput('filter'), { allowEmpty: true, defaultValue: {} }),
+      filter: client_parseJsonInput('filter', lib_core.getInput('filter'), {
+        allowEmpty: true,
+        defaultValue: {},
+      }),
     })
     setJsonOutput('result', result)
   },
@@ -52394,7 +52423,10 @@ const handlers = {
     const result = await client.rpc({
       schema: getString('schema', { defaultValue: 'public' }),
       name: getString('rpc-name', { required: true }),
-      params: client_parseJsonInput('rpc-params', lib_core.getInput('rpc-params'), { allowEmpty: true, defaultValue: {} }),
+      params: client_parseJsonInput('rpc-params', lib_core.getInput('rpc-params'), {
+        allowEmpty: true,
+        defaultValue: {},
+      }),
     })
     setJsonOutput('result', result)
   },
