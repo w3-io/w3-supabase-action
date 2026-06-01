@@ -9,6 +9,8 @@
  *     on err.code. Supabase's own errors get translated into typed codes.
  */
 
+import { Buffer } from 'node:buffer'
+
 import { createClient } from '@supabase/supabase-js'
 import { W3ActionError } from '@w3-io/action-core'
 

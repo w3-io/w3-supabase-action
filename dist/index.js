@@ -42376,6 +42376,8 @@ function createMockCore() {
 
 
 
+;// CONCATENATED MODULE: external "node:buffer"
+const external_node_buffer_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:buffer");
 // EXTERNAL MODULE: ./node_modules/@supabase/functions-js/dist/main/index.js
 var main = __nccwpck_require__(459);
 ;// CONCATENATED MODULE: ./node_modules/@supabase/postgrest-js/dist/index.mjs
@@ -51879,6 +51881,8 @@ if (shouldShowDeprecationWarning()) console.warn("⚠️  Node.js 18 and below a
 
 
 
+
+
 class SupabaseError extends error_W3ActionError {
   constructor(code, message, { statusCode, details } = {}) {
     super(code, message, { statusCode, details })
@@ -52178,7 +52182,7 @@ class SupabaseSdkClient {
     client_requireInput('bucket', bucket)
     client_requireInput('path', path)
     client_requireInput('file-content', fileContentBase64)
-    const bytes = Buffer.from(fileContentBase64, 'base64')
+    const bytes = external_node_buffer_namespaceObject.Buffer.from(fileContentBase64, 'base64')
     const { data, error } = await this.client.storage
       .from(bucket)
       .upload(path, bytes, {
@@ -52195,7 +52199,7 @@ class SupabaseSdkClient {
     const { data, error } = await this.client.storage.from(bucket).download(path)
     if (error) throw translateError(error, 'STORAGE_DOWNLOAD_FAILED')
     const arrayBuf = await data.arrayBuffer()
-    const base64 = Buffer.from(arrayBuf).toString('base64')
+    const base64 = external_node_buffer_namespaceObject.Buffer.from(arrayBuf).toString('base64')
     return {
       path,
       contentType: data.type,
