@@ -1,198 +1,229 @@
-# W3 Action Template
+# W3 Supabase Action
 
-Start here to build a new action for W3 workflows.
+Connect W3 workflows to Supabase. Run Postgres queries, manage Auth, upload/download files, invoke Edge Functions — all from a workflow step.
 
-Actions built from this template work on both the W3 runtime and GitHub
-Actions runners — same YAML, both environments.
-
-## Getting started
-
-1. **Create your repo** from this template:
-
-   ```bash
-   gh repo create w3-io/w3-yourpartner-action \
-     --public \
-     --template w3-io/w3-action-template \
-     --clone
-   cd w3-yourpartner-action
-   ```
-
-2. **Set up GitHub Packages auth** (one-time, for `@w3-io/action-core`):
-
-   ```bash
-   echo "//npm.pkg.github.com/:_authToken=$(gh auth token)" >> ~/.npmrc
-   echo "@w3-io:registry=https://npm.pkg.github.com" >> ~/.npmrc
-   ```
-
-3. **Install dependencies:**
-
-   ```bash
-   npm install
-   ```
-
-4. **Rename the placeholders.** Search for `TODO` across the codebase.
-   Main things to change:
-   - `action.yml` — your action's name, description, inputs, commands
-   - `src/index.js` — wire your commands into the router
-   - `src/client.js` — your API client (the core logic)
-   - `w3-action.yaml` — registry metadata for MCP discovery
-   - `README.md` — replace this with your action's docs
-
-5. **Write your client** in `src/client.js`. Keep it independent of
-   `@actions/core` so it can be imported directly by others.
-
-6. **Add commands** to `src/index.js`. Use the `createCommandRouter`
-   from `@w3-io/action-core`:
-
-   ```javascript
-   import { createCommandRouter, setJsonOutput, handleError } from '@w3-io/action-core'
-   import * as core from '@actions/core'
-   import { Client } from './client.js'
-
-   const router = createCommandRouter({
-     'my-command': async () => {
-       const client = new Client({ apiKey: core.getInput('api-key') })
-       const result = await client.myCommand(core.getInput('input'))
-       setJsonOutput('result', result)
-     },
-   })
-
-   router()
-   ```
-
-7. **Write tests** in `test/`. Use `node:test` and `node:assert`:
-
-   ```bash
-   npm test
-   ```
-
-8. **Build and verify:**
-
-   ```bash
-   npm run build     # bundle to dist/ with NCC
-   npm run all       # format + lint + test + build
-   ```
-
-9. **Commit dist/ and tag** a release:
-
-   ```bash
-   git add dist/ && git commit -m "Build dist"
-   git tag v0.1.0 && git tag v0
-   git push --tags
-   ```
-
-   Users reference your action as:
-
-   ```yaml
-   uses: w3-io/w3-yourpartner-action@v0
-   ```
-
-## What `@w3-io/action-core` gives you
-
-Every W3 action uses the shared library. Don't reinvent these:
-
-| Import                | What it does                                                |
-| --------------------- | ----------------------------------------------------------- |
-| `createCommandRouter` | Dispatches on the `command` input, handles unknown commands |
-| `setJsonOutput`       | Serializes output exactly once (prevents double-encoding)   |
-| `handleError`         | Structured error reporting with codes and status            |
-| `request`             | HTTP with timeout, retry on 429/5xx, auth helpers           |
-| `requireInput`        | Throws with clear message if input is missing               |
-| `parseJsonInput`      | Parses JSON input with error handling                       |
-| `bridge`              | Syscall bridge client for chain/crypto operations           |
-
-### Using the bridge
-
-If your action needs blockchain or crypto operations, use the bridge
-instead of bundling SDKs:
-
-```javascript
-import { bridge } from '@w3-io/action-core'
-
-// Chain operations (ethereum, bitcoin, solana)
-const balance = await bridge.chain('ethereum', 'get-balance', { address })
-
-// Crypto primitives
-const hash = await bridge.crypto('keccak256', { data: '0xdeadbeef' })
+```yaml
+- uses: w3-io/w3-supabase-action@v1
+  with:
+    command: query
+    url: ${{ secrets.SUPABASE_URL }}
+    key: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    table: orders
+    filter: '{"status":{"eq":"pending"}}'
 ```
 
-The bridge runs on the host — no `ethers`, `web3.js`, or WASM in your container.
+## Quick start
 
-## Conventions
+1. **Get your Supabase URL and a key:**
 
-### Inputs
+   - Project URL — `https://YOUR_PROJECT.supabase.co`
+   - **service-role key** (Settings → API) — for server-side workflows; **bypasses Row Level Security**, treat like a master password
+   - **anon key** (Settings → API) — for client-style auth flows (sign-up, sign-in)
 
-| Input     | Convention                                                      |
-| --------- | --------------------------------------------------------------- |
-| `command` | Required. The operation to perform.                             |
-| `api-key` | API key. Always `api-key`, never `apikey` or `api_key`.         |
-| `api-url` | Optional endpoint override for staging/testing.                 |
-| (others)  | Plain names, no partner prefix. `address`, not `cube3-address`. |
+2. **Store them as W3 workflow secrets** (or GitHub repo secrets if running as a GHA).
 
-### Outputs
+3. **Pick a command** from below and call it.
 
-One output: `result`. Always JSON. Use `setJsonOutput('result', data)`.
+## Picking the right key
 
-### Errors
+Most workflow operations want the **service-role key** because workflows run server-side and need full table access (RLS bypass). Use the **anon key** only when you're acting on behalf of an end user (auth flows).
 
-Use `handleError` from action-core. It sets structured error codes
-and calls `core.setFailed()`.
+| Command family | Recommended key | Why |
+|---|---|---|
+| Database (`query`, `insert`, etc.) | service-role | Workflows usually need to read/write across all rows, ignoring RLS |
+| `auth-sign-up`, `auth-sign-in-*`, `auth-reset-password` | anon | These are client-style flows; anon is what your app uses |
+| `auth-sign-out`, `auth-update-user`, `auth-verify-jwt`, `auth-get-user` | service-role | Server-side admin operations on a user's session |
+| Storage | service-role | Same RLS reasoning as Database |
+| `invoke-function` | either | Whichever your function expects |
 
-### File structure
-
-```
-w3-yourpartner-action/
-├── README.md               # Quick Start, Commands, Inputs, Outputs, Auth
-├── action.yml              # GHA contract — inputs, outputs, runtime
-├── w3-action.yaml          # MCP registry metadata
-├── src/
-│   ├── index.js            # Command router (uses action-core)
-│   └── client.js           # Your API client
-├── test/
-│   └── client.test.js      # Tests (node:test)
-├── docs/
-│   └── guide.md            # Integration guide (synced to MCP)
-├── dist/
-│   └── index.js            # Bundled by NCC (committed)
-├── package.json            # NCC build, action-core dep
-└── .gitignore              # Includes .npmrc, excludes dist/
-```
-
-### README structure
-
-Every action README follows this format:
-
-```markdown
-# W3 YourPartner Action
-
-One-line description.
-
-## Quick Start
-
-## Commands (table: command, description)
-
-## Inputs (table: name, required, default, description)
-
-## Outputs (table: name, description)
-
-## Authentication
-```
-
-## MCP integration
-
-When your action is released, add it to the W3 MCP registry so the
-explorer chat and Claude Code can discover it:
-
-1. Add your action to `w3-mcp/registry.yaml` under `gha-actions:`
-2. Include all commands with typed input/output schemas
-3. Add a guide to `w3-mcp/content/integrations/`
-4. Run `w3-mcp/scripts/sync-registry.sh` to verify
+The `key-type` input is informational — Supabase itself enforces what each operation needs based on the key you pass.
 
 ## Examples
 
-Actions built from this template:
+### Read pending orders
 
-- [w3-chainalysis-action](https://github.com/w3-io/w3-chainalysis-action) — Sanctions screening (single command)
-- [w3-pyth-action](https://github.com/w3-io/w3-pyth-action) — Price oracle (3 commands, no auth)
-- [w3-stripe-action](https://github.com/w3-io/w3-stripe-action) — Payments (41 commands)
-- [w3-email-action](https://github.com/w3-io/w3-email-action) — Multi-provider email
+```yaml
+- name: Read pending orders
+  id: orders
+  uses: w3-io/w3-supabase-action@v1
+  with:
+    command: query
+    url: ${{ secrets.SUPABASE_URL }}
+    key: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    table: orders
+    filter: '{"status":{"eq":"pending"},"created_at":{"gte":"2026-01-01"}}'
+    select: "id,user_id,amount,currency"
+    order: '[{"column":"created_at","ascending":false}]'
+    limit: "100"
+```
+
+The `result` output is `{ "rows": [...], "count": N }` — use `${{ fromJSON(steps.orders.outputs.result).rows }}` in the next step.
+
+### Insert a single row
+
+```yaml
+- uses: w3-io/w3-supabase-action@v1
+  with:
+    command: insert
+    url: ${{ secrets.SUPABASE_URL }}
+    key: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    table: audit_log
+    data: '{"event":"workflow_started","trigger":"cron","metadata":{"chain":"ethereum"}}'
+```
+
+### Upsert by email
+
+```yaml
+- uses: w3-io/w3-supabase-action@v1
+  with:
+    command: upsert
+    url: ${{ secrets.SUPABASE_URL }}
+    key: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    table: contacts
+    data: '[{"email":"alice@example.com","name":"Alice"},{"email":"bob@example.com","name":"Bob"}]'
+    on-conflict: "email"
+```
+
+### Update rows matching a filter
+
+```yaml
+- uses: w3-io/w3-supabase-action@v1
+  with:
+    command: update
+    url: ${{ secrets.SUPABASE_URL }}
+    key: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    table: orders
+    filter: '{"id":{"eq":42}}'
+    data: '{"status":"shipped","shipped_at":"now()"}'
+```
+
+Filter is **required** for `update` and `delete` — preventing accidental full-table operations.
+
+### Verify a JWT from a workflow trigger
+
+```yaml
+- name: Verify caller's JWT
+  uses: w3-io/w3-supabase-action@v1
+  with:
+    command: auth-verify-jwt
+    url: ${{ secrets.SUPABASE_URL }}
+    key: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    jwt: ${{ inputs.user_jwt }}
+```
+
+Raises `JWT_EXPIRED` or `JWT_INVALID` on failure; returns `{ valid: true, user }` on success.
+
+### Upload a generated PDF
+
+```yaml
+- uses: w3-io/w3-supabase-action@v1
+  with:
+    command: storage-upload
+    url: ${{ secrets.SUPABASE_URL }}
+    key: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    bucket: reports
+    path: ${{ inputs.user_id }}/${{ inputs.report_id }}.pdf
+    file-content: ${{ steps.render.outputs.pdf_base64 }}
+    content-type: application/pdf
+```
+
+Pair with `storage-get-signed-url` to share the artifact with an end user.
+
+### Invoke an Edge Function
+
+```yaml
+- uses: w3-io/w3-supabase-action@v1
+  with:
+    command: invoke-function
+    url: ${{ secrets.SUPABASE_URL }}
+    key: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    function-name: enrich-transaction
+    function-body: '{"tx_hash":"${{ steps.signed.outputs.tx_hash }}"}'
+```
+
+## Command reference
+
+### Database
+
+| Command | Purpose |
+|---|---|
+| `query` | Select rows |
+| `insert` | Add rows |
+| `upsert` | Add or update rows on conflict |
+| `update` | Modify rows matching a filter (filter required) |
+| `delete` | Remove rows matching a filter (filter required) |
+| `count` | Count rows matching a filter |
+| `rpc` | Call a stored procedure / database function |
+
+### Auth
+
+| Command | Purpose |
+|---|---|
+| `auth-sign-up` | Register a new user |
+| `auth-sign-in-password` | Sign in with email + password |
+| `auth-sign-in-otp` | Send magic-link / OTP email |
+| `auth-sign-out` | Invalidate a JWT session |
+| `auth-get-user` | Get user from a JWT |
+| `auth-update-user` | Change email, password, or metadata |
+| `auth-verify-jwt` | Validate a JWT |
+| `auth-reset-password` | Send password reset email |
+
+### Storage
+
+| Command | Purpose |
+|---|---|
+| `storage-upload` | Upload a file (base64) |
+| `storage-download` | Download a file (base64) |
+| `storage-list` | List files in a bucket/path |
+| `storage-delete` | Delete a file |
+| `storage-get-signed-url` | Generate a time-limited URL |
+| `storage-get-public-url` | Get the public URL (public buckets only) |
+| `storage-move` | Rename a file |
+| `storage-copy` | Copy a file to a new path |
+
+### Edge Functions
+
+| Command | Purpose |
+|---|---|
+| `invoke-function` | Call a deployed Edge Function |
+
+See [`docs/guide.md`](docs/guide.md) for the full input/output schema per command.
+
+## Filter syntax
+
+Filters are JSON objects keyed by column. Each value is either a literal (shorthand for `eq`) or a `{ operator: value }` map.
+
+```json
+{
+  "status": "active",                      // shorthand → status = 'active'
+  "amount": { "gte": 100 },
+  "currency": { "in": ["USD", "EUR"] },
+  "deleted_at": { "is": null },
+  "name": { "ilike": "%alice%" }
+}
+```
+
+Supported operators: `eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `like`, `ilike`, `is`, `in`, `contains`, `containedBy`, `overlaps`, `textSearch`, `rangeGt`, `rangeGte`, `rangeLt`, `rangeLte`, `rangeAdjacent`.
+
+## Errors
+
+All errors surface as `<CODE>: <message>` and fail the workflow step. Codes you can pattern-match on:
+
+| Code | Meaning |
+|---|---|
+| `MISSING_INPUT` | A required input was empty |
+| `INVALID_JSON` | A JSON input couldn't be parsed |
+| `INVALID_FILTER` | Filter operator not supported |
+| `NOT_FOUND` | No matching row / file |
+| `PERMISSION_DENIED` | RLS or table grant denied; consider service-role key |
+| `UNIQUE_VIOLATION` | Insert conflicted with a unique constraint |
+| `FOREIGN_KEY_VIOLATION` | Insert/delete violated a foreign key |
+| `JWT_EXPIRED` / `JWT_INVALID` | `auth-verify-jwt` failed |
+| `AUTH_INVALID_CREDENTIALS` | Wrong email/password |
+| `UNSAFE_UPDATE` / `UNSAFE_DELETE` | Filter was empty on update/delete |
+| `STORAGE_*` | Per-storage-operation failures |
+| `FUNCTION_INVOKE_FAILED` | Edge Function returned an error |
+
+## License
+
+MIT

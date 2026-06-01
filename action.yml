@@ -1,44 +1,156 @@
-# TODO: Replace this entire file with your action's definition.
-#
-# This file is the contract between your action and the workflow runner.
-# It defines what inputs your action accepts and what outputs it produces.
-# Keep inputs minimal and well-named. See the README for naming conventions.
-#
-# Reference: https://docs.github.com/en/actions/creating-actions/metadata-syntax-for-github-actions
-
-name: 'W3 YourPartner Action' # TODO: e.g. "W3 Cube3 Action"
-description: 'Short description' # TODO: what does your action do?
-author: 'w3-io'
+name: "W3 Supabase Action"
+description: "Supabase integration for W3 workflows: Postgres queries, Auth, Storage, Edge Functions"
+author: "w3-io"
 
 inputs:
+  # ───── Core ─────
   command:
-    description: 'Operation to perform' # TODO: list your commands here
+    description: >
+      Operation to perform. Database: query, insert, upsert, update, delete, count, rpc.
+      Auth: auth-sign-up, auth-sign-in-password, auth-sign-in-otp, auth-sign-out,
+      auth-get-user, auth-update-user, auth-verify-jwt, auth-reset-password.
+      Storage: storage-upload, storage-download, storage-list, storage-delete,
+      storage-get-signed-url, storage-get-public-url, storage-move, storage-copy.
+      Functions: invoke-function.
     required: true
-  api-key:
-    description: 'API key for authentication'
-    required: true # TODO: set to false if your API needs no auth
-  api-url:
-    description: 'API base URL override (for testing or staging)'
+  url:
+    description: "Supabase project URL (e.g. https://abcdefghij.supabase.co)"
+    required: true
+  key:
+    description: >
+      Supabase API key. Use the service-role key for server-side workflows
+      (bypasses Row Level Security; recommended default). Use the anon key
+      for client-style auth flows (sign-up, sign-in, etc.).
+    required: true
+  key-type:
+    description: "Type of key being used: service-role (default) or anon."
     required: false
-    default: 'https://api.yourpartner.com' # TODO: your partner's production API URL
+    default: "service-role"
 
-  # TODO: Add your command-specific inputs below. Use plain names without
-  # partner prefix. For example:
-  #
-  # address:
-  #   description: 'Blockchain address to inspect'
-  #   required: false
-  #
-  # symbols:
-  #   description: 'Comma-separated token symbols (e.g. "BTC,ETH")'
-  #   required: false
+  # ───── Database ─────
+  table:
+    description: "Table name (for query, insert, upsert, update, delete, count)"
+    required: false
+    default: ""
+  schema:
+    description: "Postgres schema (default: public)"
+    required: false
+    default: "public"
+  filter:
+    description: >
+      PostgREST filter as JSON. Example: {"id":{"eq":5}} or
+      {"status":{"in":["pending","active"]},"created_at":{"gte":"2026-01-01"}}.
+      Supported operators: eq, neq, gt, gte, lt, lte, like, ilike, is, in, contains, containedBy.
+    required: false
+    default: "{}"
+  select:
+    description: 'Columns to return (PostgREST select, default "*"). Example: "id,name,profile(name)"'
+    required: false
+    default: "*"
+  order:
+    description: 'Order spec as JSON. Example: [{"column":"created_at","ascending":false}]'
+    required: false
+    default: ""
+  limit:
+    description: "Maximum rows to return"
+    required: false
+    default: ""
+  offset:
+    description: "Rows to skip"
+    required: false
+    default: ""
+  data:
+    description: "Row(s) to insert/upsert/update as JSON (single object or array of objects)"
+    required: false
+    default: ""
+  on-conflict:
+    description: "Column(s) for upsert conflict resolution. Example: id or email"
+    required: false
+    default: ""
+  return-rows:
+    description: "Return the affected rows after insert/upsert/update/delete (default: true)"
+    required: false
+    default: "true"
+  rpc-name:
+    description: "Stored procedure / function name (for rpc command)"
+    required: false
+    default: ""
+  rpc-params:
+    description: "Stored procedure parameters as JSON object"
+    required: false
+    default: "{}"
+
+  # ───── Auth ─────
+  email:
+    description: "User email (for auth-sign-up, auth-sign-in-password, auth-sign-in-otp, auth-reset-password)"
+    required: false
+    default: ""
+  password:
+    description: "User password (for auth-sign-up, auth-sign-in-password)"
+    required: false
+    default: ""
+  user-metadata:
+    description: "User metadata as JSON (for auth-sign-up, auth-update-user)"
+    required: false
+    default: "{}"
+  jwt:
+    description: "JWT token (for auth-verify-jwt, auth-get-user, auth-sign-out, auth-update-user)"
+    required: false
+    default: ""
+  redirect-to:
+    description: "Redirect URL for OTP / password reset emails"
+    required: false
+    default: ""
+
+  # ───── Storage ─────
+  bucket:
+    description: "Storage bucket name"
+    required: false
+    default: ""
+  path:
+    description: "File path within bucket (e.g. user-123/avatar.png)"
+    required: false
+    default: ""
+  file-content:
+    description: "File content as base64-encoded string (for storage-upload)"
+    required: false
+    default: ""
+  content-type:
+    description: 'MIME type of uploaded file (default: "application/octet-stream")'
+    required: false
+    default: "application/octet-stream"
+  destination-path:
+    description: "Destination path (for storage-move, storage-copy)"
+    required: false
+    default: ""
+  expires-in:
+    description: "Signed URL TTL in seconds (default: 3600)"
+    required: false
+    default: "3600"
+
+  # ───── Functions ─────
+  function-name:
+    description: "Edge Function name (for invoke-function)"
+    required: false
+    default: ""
+  function-body:
+    description: "JSON body to POST to the Edge Function"
+    required: false
+    default: ""
+  function-headers:
+    description: "Custom headers as JSON object (for invoke-function)"
+    required: false
+    default: "{}"
 
 outputs:
   result:
-    description: 'JSON result of the operation'
-    # This is the only output. Always a JSON string.
-    # Document the schema in your w3-action.yaml and docs/guide.md.
+    description: >
+      JSON result of the operation. Shape depends on command:
+      database commands return rows or counts;
+      auth commands return user and session objects;
+      storage upload/download returns path metadata or base64 content;
+      invoke-function returns the function's response body.
 
 runs:
-  using: 'node24'
-  main: 'dist/index.js'
+  using: "node24"
+  main: "dist/index.js"

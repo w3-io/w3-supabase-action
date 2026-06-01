@@ -1,55 +1,309 @@
 import * as core from '@actions/core'
 import { createCommandRouter, setJsonOutput, handleError } from '@w3-io/action-core'
-// TODO: Import your client and error class
-import { Client, ClientError } from './client.js'
+import { SupabaseSdkClient, SupabaseError, parseJsonInput } from './client.js'
 
 /**
- * W3 Action — command dispatch.
+ * W3 Supabase Action — command dispatch.
  *
- * Each command handler is an async function that:
- *   1. Reads inputs via @actions/core
- *   2. Calls a method on your client
- *   3. Sets the JSON output via setJsonOutput
+ * Each handler:
+ *   1. Reads typed inputs via @actions/core
+ *   2. Parses JSON inputs where needed
+ *   3. Calls the matching SupabaseSdkClient method
+ *   4. Sets the JSON output via setJsonOutput
  *
- * createCommandRouter from @w3-io/action-core handles dispatch by command
- * name and reports unknown commands with the available list.
- *
- * To add a command:
- *   1. Write a handler in the `handlers` object below
- *   2. Add a matching method on your client
- *   3. Document it in action.yml, w3-action.yaml, and docs/guide.md
+ * Adding a command:
+ *   1. Add the handler here
+ *   2. Add a matching method on SupabaseSdkClient in client.js
+ *   3. Document in action.yml, w3-action.yaml, README.md
  */
 
-// TODO: Initialize your client
 function getClient() {
-  return new Client({
-    apiKey: core.getInput('api-key', { required: true }),
-    baseUrl: core.getInput('api-url') || undefined,
+  return new SupabaseSdkClient({
+    url: core.getInput('url', { required: true }),
+    key: core.getInput('key', { required: true }),
+    schema: core.getInput('schema') || 'public',
   })
 }
 
+function getString(name, { required = false, defaultValue = '' } = {}) {
+  const v = core.getInput(name, { required })
+  return v === '' && defaultValue !== '' ? defaultValue : v
+}
+
+function getBool(name, defaultValue = false) {
+  const raw = core.getInput(name)
+  if (raw === '' || raw === undefined) return defaultValue
+  return raw === 'true'
+}
+
 const handlers = {
-  // TODO: Replace with your commands
-  'example-command': async () => {
+  // ───── Database ─────
+
+  query: async () => {
     const client = getClient()
-    const input = core.getInput('input', { required: true })
-    const result = await client.exampleCommand(input)
+    const result = await client.query({
+      table: getString('table', { required: true }),
+      schema: getString('schema', { defaultValue: 'public' }),
+      filter: parseJsonInput('filter', core.getInput('filter'), { allowEmpty: true, defaultValue: {} }),
+      select: getString('select', { defaultValue: '*' }),
+      order: parseJsonInput('order', core.getInput('order'), { allowEmpty: true }),
+      limit: getString('limit'),
+      offset: getString('offset'),
+    })
+    setJsonOutput('result', result)
+  },
+
+  insert: async () => {
+    const client = getClient()
+    const result = await client.insert({
+      table: getString('table', { required: true }),
+      schema: getString('schema', { defaultValue: 'public' }),
+      data: parseJsonInput('data', core.getInput('data')),
+      returnRows: getBool('return-rows', true),
+    })
+    setJsonOutput('result', result)
+  },
+
+  upsert: async () => {
+    const client = getClient()
+    const result = await client.upsert({
+      table: getString('table', { required: true }),
+      schema: getString('schema', { defaultValue: 'public' }),
+      data: parseJsonInput('data', core.getInput('data')),
+      onConflict: getString('on-conflict') || undefined,
+      returnRows: getBool('return-rows', true),
+    })
+    setJsonOutput('result', result)
+  },
+
+  update: async () => {
+    const client = getClient()
+    const result = await client.update({
+      table: getString('table', { required: true }),
+      schema: getString('schema', { defaultValue: 'public' }),
+      filter: parseJsonInput('filter', core.getInput('filter'), { allowEmpty: true, defaultValue: {} }),
+      data: parseJsonInput('data', core.getInput('data')),
+      returnRows: getBool('return-rows', true),
+    })
+    setJsonOutput('result', result)
+  },
+
+  delete: async () => {
+    const client = getClient()
+    const result = await client.delete({
+      table: getString('table', { required: true }),
+      schema: getString('schema', { defaultValue: 'public' }),
+      filter: parseJsonInput('filter', core.getInput('filter'), { allowEmpty: true, defaultValue: {} }),
+      returnRows: getBool('return-rows', true),
+    })
+    setJsonOutput('result', result)
+  },
+
+  count: async () => {
+    const client = getClient()
+    const result = await client.count({
+      table: getString('table', { required: true }),
+      schema: getString('schema', { defaultValue: 'public' }),
+      filter: parseJsonInput('filter', core.getInput('filter'), { allowEmpty: true, defaultValue: {} }),
+    })
+    setJsonOutput('result', result)
+  },
+
+  rpc: async () => {
+    const client = getClient()
+    const result = await client.rpc({
+      schema: getString('schema', { defaultValue: 'public' }),
+      name: getString('rpc-name', { required: true }),
+      params: parseJsonInput('rpc-params', core.getInput('rpc-params'), { allowEmpty: true, defaultValue: {} }),
+    })
+    setJsonOutput('result', result)
+  },
+
+  // ───── Auth ─────
+
+  'auth-sign-up': async () => {
+    const client = getClient()
+    const result = await client.authSignUp({
+      email: getString('email', { required: true }),
+      password: getString('password', { required: true }),
+      userMetadata: parseJsonInput('user-metadata', core.getInput('user-metadata'), {
+        allowEmpty: true,
+        defaultValue: {},
+      }),
+      redirectTo: getString('redirect-to') || undefined,
+    })
+    setJsonOutput('result', result)
+  },
+
+  'auth-sign-in-password': async () => {
+    const client = getClient()
+    const result = await client.authSignInPassword({
+      email: getString('email', { required: true }),
+      password: getString('password', { required: true }),
+    })
+    setJsonOutput('result', result)
+  },
+
+  'auth-sign-in-otp': async () => {
+    const client = getClient()
+    const result = await client.authSignInOtp({
+      email: getString('email', { required: true }),
+      redirectTo: getString('redirect-to') || undefined,
+    })
+    setJsonOutput('result', result)
+  },
+
+  'auth-sign-out': async () => {
+    const client = getClient()
+    const result = await client.authSignOut({
+      jwt: getString('jwt', { required: true }),
+    })
+    setJsonOutput('result', result)
+  },
+
+  'auth-get-user': async () => {
+    const client = getClient()
+    const result = await client.authGetUser({
+      jwt: getString('jwt', { required: true }),
+    })
+    setJsonOutput('result', result)
+  },
+
+  'auth-update-user': async () => {
+    const client = getClient()
+    const result = await client.authUpdateUser({
+      jwt: getString('jwt', { required: true }),
+      email: getString('email') || undefined,
+      password: getString('password') || undefined,
+      userMetadata: parseJsonInput('user-metadata', core.getInput('user-metadata'), {
+        allowEmpty: true,
+        defaultValue: {},
+      }),
+    })
+    setJsonOutput('result', result)
+  },
+
+  'auth-verify-jwt': async () => {
+    const client = getClient()
+    const result = await client.authVerifyJwt({
+      jwt: getString('jwt', { required: true }),
+    })
+    setJsonOutput('result', result)
+  },
+
+  'auth-reset-password': async () => {
+    const client = getClient()
+    const result = await client.authResetPassword({
+      email: getString('email', { required: true }),
+      redirectTo: getString('redirect-to') || undefined,
+    })
+    setJsonOutput('result', result)
+  },
+
+  // ───── Storage ─────
+
+  'storage-upload': async () => {
+    const client = getClient()
+    const result = await client.storageUpload({
+      bucket: getString('bucket', { required: true }),
+      path: getString('path', { required: true }),
+      fileContentBase64: getString('file-content', { required: true }),
+      contentType: getString('content-type', { defaultValue: 'application/octet-stream' }),
+    })
+    setJsonOutput('result', result)
+  },
+
+  'storage-download': async () => {
+    const client = getClient()
+    const result = await client.storageDownload({
+      bucket: getString('bucket', { required: true }),
+      path: getString('path', { required: true }),
+    })
+    setJsonOutput('result', result)
+  },
+
+  'storage-list': async () => {
+    const client = getClient()
+    const result = await client.storageList({
+      bucket: getString('bucket', { required: true }),
+      path: getString('path'),
+      limit: getString('limit'),
+      offset: getString('offset'),
+    })
+    setJsonOutput('result', result)
+  },
+
+  'storage-delete': async () => {
+    const client = getClient()
+    const result = await client.storageDelete({
+      bucket: getString('bucket', { required: true }),
+      path: getString('path', { required: true }),
+    })
+    setJsonOutput('result', result)
+  },
+
+  'storage-get-signed-url': async () => {
+    const client = getClient()
+    const result = await client.storageGetSignedUrl({
+      bucket: getString('bucket', { required: true }),
+      path: getString('path', { required: true }),
+      expiresIn: getString('expires-in', { defaultValue: '3600' }),
+    })
+    setJsonOutput('result', result)
+  },
+
+  'storage-get-public-url': async () => {
+    const client = getClient()
+    const result = await client.storageGetPublicUrl({
+      bucket: getString('bucket', { required: true }),
+      path: getString('path', { required: true }),
+    })
+    setJsonOutput('result', result)
+  },
+
+  'storage-move': async () => {
+    const client = getClient()
+    const result = await client.storageMove({
+      bucket: getString('bucket', { required: true }),
+      path: getString('path', { required: true }),
+      destinationPath: getString('destination-path', { required: true }),
+    })
+    setJsonOutput('result', result)
+  },
+
+  'storage-copy': async () => {
+    const client = getClient()
+    const result = await client.storageCopy({
+      bucket: getString('bucket', { required: true }),
+      path: getString('path', { required: true }),
+      destinationPath: getString('destination-path', { required: true }),
+    })
+    setJsonOutput('result', result)
+  },
+
+  // ───── Functions ─────
+
+  'invoke-function': async () => {
+    const client = getClient()
+    const result = await client.invokeFunction({
+      name: getString('function-name', { required: true }),
+      body: parseJsonInput('function-body', core.getInput('function-body'), { allowEmpty: true }),
+      headers: parseJsonInput('function-headers', core.getInput('function-headers'), {
+        allowEmpty: true,
+        defaultValue: {},
+      }),
+    })
     setJsonOutput('result', result)
   },
 }
 
 const router = createCommandRouter(handlers)
 
-/**
- * Top-level run wrapper. Catches structured client errors separately so
- * the partner-specific error code reaches `core.setFailed`, falling back
- * to action-core's generic handler for everything else.
- */
 export async function run() {
   try {
     await router()
   } catch (error) {
-    if (error instanceof ClientError) {
+    if (error instanceof SupabaseError) {
       core.setFailed(`${error.code}: ${error.message}`)
     } else {
       handleError(error)
