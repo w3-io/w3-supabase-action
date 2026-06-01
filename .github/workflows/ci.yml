@@ -13,10 +13,6 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
-    # @w3-io/action-core is published as a public GitHub Packages package,
-    # so the default GITHUB_TOKEN's read:packages scope is sufficient.
-    env:
-      NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
@@ -27,10 +23,17 @@ jobs:
           registry-url: 'https://npm.pkg.github.com'
           scope: '@w3-io'
 
+      # @w3-io/action-core is a public GitHub Packages package — the
+      # default GITHUB_TOKEN's read:packages scope is sufficient.
       - run: npm ci
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Standards lint
-        run: npx @w3-io/action-lint@latest
+      # NOTE: `npx @w3-io/action-lint@latest` (the W3 standards checklist
+      # runner) is omitted from this workflow because the action-lint
+      # package is currently private and the org-level read token is not
+      # available to public repos. Add it back once action-lint is public
+      # or once a public-repo-visible PAT is wired up.
 
       - name: Format check
         run: npm run format:check
