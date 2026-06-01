@@ -1,99 +1,319 @@
-# TODO: This file describes your action for the W3 MCP server.
-# AI agents use this to discover your action, understand its commands,
-# and generate correct workflow YAML. Keep it in sync with action.yml.
-#
-# On release, this file is synced to the MCP's registry.yaml.
+kind: integration
+partner: supabase
+name: Supabase Integration
+version: 0.1.0
+repo: w3-io/w3-supabase-action
 
-kind: integration # integration | primitive | utility
-partner: yourpartner # TODO: machine-readable partner ID
-name: YourPartner Integration # TODO: human-readable name
-version: 1.0.0
-repo: w3-io/w3-yourpartner-action # TODO: your repo
+description: >
+  Connect W3 workflows to Supabase: Postgres queries (PostgREST), Auth
+  (sign-in / JWT verification), Storage (uploads / signed URLs), and Edge
+  Functions. 22 commands across 4 subsystems behind a single uniform
+  command-router interface.
 
-description: > # TODO: replace with a short description of what this action does.
-  TODO — Short summary of what your action does, who its end users
-  are, and what the core capabilities are. AI agents read this when
-  recommending the action.
-
-context: > # TODO: replace with a longer note about when to use this action.
-  TODO — Longer note for AI agents about when to choose this action
-  over alternatives. Cover: the kinds of workflows this action belongs
-  in, what makes it the right choice vs. similar partner actions, any
-  hard requirements (secrets, KYC, allowlists), and any common pitfalls
-  authors hit when wiring it up. ~3–5 sentences.
+context: >
+  Use this action when a workflow needs structured off-chain state
+  (audit trails, intermediate state, configuration tables), user
+  authentication tied to a Supabase project, file artifacts (PDFs,
+  exports, generated assets) attached to workflow output, or to invoke
+  an Edge Function as pre/post-processing. Pass `key` as the
+  service-role key for server-side workflows that bypass Row Level
+  Security (the common case), or the anon key for client-style auth
+  flows (sign-up, sign-in, password reset). All commands take `url`
+  and `key`; the `key-type` input is informational. Database commands
+  are unprefixed (`query`, `insert`); auth, storage, and function
+  commands carry a prefix. Output is always a single JSON string on
+  `result` whose shape varies by command.
 
 commands:
-  # TODO: Define each command your action supports. Example:
-  #
-  # - name: inspect
-  #   description: >
-  #     Risk assessment for a blockchain address. Returns per-chain
-  #     scores for fraud, compliance, and cyber risk.
-  #   inputs:
-  #     address:
-  #       type: string
-  #       required: true
-  #       description: Blockchain address to inspect
-  #     chain-id:
-  #       type: string
-  #       required: false
-  #       description: Filter to a specific chain
-  #   outputs:
-  #     result:
-  #       type: object
-  #       description: Full risk score breakdown
-
-  - name: example-command
-    description: TODO - describe what this command does
+  # ───── Database ─────
+  - name: query
+    description: >
+      Select rows from a table with optional filter, order, limit, offset.
+      Returns rows in an array; count is the array length (use `count`
+      command for a total).
     inputs:
-      input:
+      table: { type: string, required: true, description: Table name }
+      schema: { type: string, required: false, description: 'Postgres schema (default: public)' }
+      filter:
         type: string
-        required: true
-        description: TODO - describe this input
+        required: false
+        description: >
+          PostgREST filter as JSON. Examples: {"id":{"eq":5}}, or
+          {"status":{"in":["a","b"]},"created_at":{"gte":"2026-01-01"}}.
+          Use {"col": null} as shorthand for "col IS NULL".
+      select:
+        {
+          type: string,
+          required: false,
+          description: 'Columns to return (default "*"). Supports joins.',
+        }
+      order:
+        {
+          type: string,
+          required: false,
+          description: 'Order spec as JSON array of {column, ascending, nullsFirst}',
+        }
+      limit: { type: string, required: false, description: Max rows }
+      offset: { type: string, required: false, description: Rows to skip }
+    outputs:
+      result: { type: object, description: '{ rows: [...], count: <returned-rows-count> }' }
+
+  - name: insert
+    description: Insert one or more rows.
+    inputs:
+      table: { type: string, required: true }
+      data:
+        { type: string, required: true, description: Row(s) to insert as JSON (object or array) }
+      schema: { type: string, required: false }
+      return-rows:
+        { type: string, required: false, description: 'Return inserted rows (default: true)' }
+    outputs:
+      result: { type: object, description: '{ rows: [...], count: N }' }
+
+  - name: upsert
+    description: Insert or update rows on conflict.
+    inputs:
+      table: { type: string, required: true }
+      data: { type: string, required: true, description: Row(s) as JSON }
+      on-conflict:
+        {
+          type: string,
+          required: false,
+          description: 'Conflict column(s); defaults to the primary key',
+        }
+      schema: { type: string, required: false }
+      return-rows: { type: string, required: false }
+    outputs:
+      result: { type: object, description: '{ rows: [...], count: N }' }
+
+  - name: update
+    description: >
+      Update rows matching a filter. Filter is required (empty filter
+      raises UNSAFE_UPDATE).
+    inputs:
+      table: { type: string, required: true }
+      filter: { type: string, required: true, description: Non-empty PostgREST filter }
+      data: { type: string, required: true, description: Updates as JSON object }
+      schema: { type: string, required: false }
+      return-rows: { type: string, required: false }
+    outputs:
+      result: { type: object, description: '{ rows: [...], count: N }' }
+
+  - name: delete
+    description: >
+      Delete rows matching a filter. Filter is required (empty filter
+      raises UNSAFE_DELETE).
+    inputs:
+      table: { type: string, required: true }
+      filter: { type: string, required: true, description: Non-empty PostgREST filter }
+      schema: { type: string, required: false }
+      return-rows: { type: string, required: false }
+    outputs:
+      result: { type: object, description: '{ rows: [...], count: N }' }
+
+  - name: count
+    description: Count rows matching a filter without returning them. Cheap on large tables.
+    inputs:
+      table: { type: string, required: true }
+      filter: { type: string, required: false, description: 'Default {} (counts all rows)' }
+      schema: { type: string, required: false }
+    outputs:
+      result: { type: object, description: '{ count: N }' }
+
+  - name: rpc
+    description: Call a Postgres stored procedure / function.
+    inputs:
+      rpc-name: { type: string, required: true, description: Function name }
+      rpc-params: { type: string, required: false, description: 'Params as JSON object' }
+      schema: { type: string, required: false }
+    outputs:
+      result: { type: object, description: '{ data: <function return value> }' }
+
+  # ───── Auth ─────
+  - name: auth-sign-up
+    description: Register a new user. Anon key is the conventional pairing.
+    inputs:
+      email: { type: string, required: true }
+      password: { type: string, required: true }
+      user-metadata: { type: string, required: false, description: Per-user metadata as JSON }
+      redirect-to: { type: string, required: false, description: URL for email confirmation flow }
     outputs:
       result:
         type: object
-        description: TODO - describe the output shape
+        description: '{ user, session }. session is null if email confirmation is required.'
 
-# ── Display metadata (optional but recommended) ──────────────────────
-#
-# OPTIONAL: Adding a `display:` block makes your action render with
-# branded cards in the W3 Explorer, AI chat, and other W3 UIs. Without
-# it, your action's steps render via the renderer's generic widget for
-# their syscall kind (still works, just unbranded).
-#
-# Canonical schema: docs/display-schema.md
-# JSON Schema:      schemas/display.schema.json
-#
-# Templating syntax: {{ path.to.value | filter | filter2 }}
-# Context: { inputs: <your action input map>, outputs: <your output map>, step: <step meta> }
-#
-# Available filters (defined by the renderer, not by you):
-#   truncate_addr, chain_pretty, default:"x", length, format_rate,
-#   format_usdc_base, format_usdc_whole,
-#   decode_calldata_action, decode_calldata_amount_usdc, decode_calldata_spender,
-#   known_contract_name, known_contract_short, known_contract_brand
-#
-# display:
-#   brand:
-#     name: "Your Partner Name"
-#     short_name: "Partner"
-#     description: "One-line tagline"
-#     logo: "https://raw.githubusercontent.com/w3-io/w3-yourpartner-action/main/assets/logo.svg"
-#     color: "#3B82F6"
-#
-#   commands:
-#     example-command:
-#       icon: "info"                # named icon — renderer picks from: lock|vault|check|send|redeem|info|chart
-#       title_template: "Action: {{ inputs.input }}"
-#       subtitle_template: "subtitle goes here"
-#       summary:
-#         - { label: "Input",  value: "{{ inputs.input }}" }
-#         - { label: "Result", value: "{{ outputs.result.field | default: '—' }}" }
-#       tx_hash_path: "outputs.result.txHash"     # optional; for on-chain ops
-#       chain_explorer:                            # optional; auto-wired by tx_hash_path
-#         ethereum: "https://etherscan.io/tx/{{tx_hash}}"
-#         base:     "https://basescan.org/tx/{{tx_hash}}"
+  - name: auth-sign-in-password
+    description: Sign in with email + password. Returns user and session (with access + refresh tokens).
+    inputs:
+      email: { type: string, required: true }
+      password: { type: string, required: true }
+    outputs:
+      result:
+        {
+          type: object,
+          description: '{ user, session: { access_token, refresh_token, expires_in } }',
+        }
+
+  - name: auth-sign-in-otp
+    description: Send a magic-link / OTP email.
+    inputs:
+      email: { type: string, required: true }
+      redirect-to: { type: string, required: false }
+    outputs:
+      result: { type: object, description: '{ sent: true, email }' }
+
+  - name: auth-sign-out
+    description: Invalidate a specific JWT session. Requires the service-role key.
+    inputs:
+      jwt: { type: string, required: true, description: Access token to invalidate }
+    outputs:
+      result: { type: object, description: '{ signedOut: true }' }
+
+  - name: auth-get-user
+    description: Fetch the user associated with a JWT.
+    inputs:
+      jwt: { type: string, required: true }
+    outputs:
+      result: { type: object, description: '{ user }' }
+
+  - name: auth-update-user
+    description: >
+      Update a user's email, password, or metadata. JWT identifies the
+      user. Top-level metadata keys passed replace the same keys; omitted
+      keys are preserved (shallow merge).
+    inputs:
+      jwt: { type: string, required: true, description: Identifies which user to update }
+      email: { type: string, required: false, description: New email }
+      password: { type: string, required: false, description: New password }
+      user-metadata:
+        { type: string, required: false, description: New metadata (shallow-merged) as JSON }
+    outputs:
+      result: { type: object, description: '{ user }' }
+
+  - name: auth-verify-jwt
+    description: >
+      Validate a JWT. Returns { valid: true, user } on success; raises
+      JWT_EXPIRED or JWT_INVALID on failure.
+    inputs:
+      jwt: { type: string, required: true }
+    outputs:
+      result: { type: object, description: '{ valid: true, user }' }
+
+  - name: auth-reset-password
+    description: Send a password reset email.
+    inputs:
+      email: { type: string, required: true }
+      redirect-to: { type: string, required: false }
+    outputs:
+      result: { type: object, description: '{ sent: true, email }' }
+
+  # ───── Storage ─────
+  - name: storage-upload
+    description: Upload a file (base64-encoded). By default overwrites on conflict.
+    inputs:
+      bucket:
+        {
+          type: string,
+          required: true,
+          description: Bucket name (create it in the dashboard first),
+        }
+      path: { type: string, required: true, description: Path within the bucket }
+      file-content: { type: string, required: true, description: Base64-encoded file content }
+      content-type:
+        {
+          type: string,
+          required: false,
+          description: 'MIME type (default: application/octet-stream)',
+        }
+      storage-upsert:
+        {
+          type: string,
+          required: false,
+          description: 'Overwrite on path collision (default: true)',
+        }
+    outputs:
+      result: { type: object, description: '{ path, fullPath, id }' }
+
+  - name: storage-download
+    description: Download a file. Content returned as base64.
+    inputs:
+      bucket: { type: string, required: true }
+      path: { type: string, required: true }
+    outputs:
+      result: { type: object, description: '{ path, contentType, byteSize, contentBase64 }' }
+
+  - name: storage-list
+    description: List files in a bucket (optionally under a path prefix).
+    inputs:
+      bucket: { type: string, required: true }
+      path: { type: string, required: false, description: Path prefix to list under }
+      limit: { type: string, required: false }
+      offset: { type: string, required: false }
+    outputs:
+      result:
+        {
+          type: object,
+          description: '{ files: [{ name, id, created_at, updated_at, metadata, ... }] }',
+        }
+
+  - name: storage-delete
+    description: Delete one or more files. Pass `path` for a single file or `paths` JSON array for batch.
+    inputs:
+      bucket: { type: string, required: true }
+      path: { type: string, required: false, description: Single file path }
+      paths: { type: string, required: false, description: JSON array of paths for batch delete }
+    outputs:
+      result: { type: object, description: '{ deleted: [...] }' }
+
+  - name: storage-get-signed-url
+    description: Generate a time-limited signed download URL.
+    inputs:
+      bucket: { type: string, required: true }
+      path: { type: string, required: true }
+      expires-in: { type: string, required: false, description: 'TTL in seconds (default: 3600)' }
+    outputs:
+      result: { type: object, description: '{ signedUrl, expiresIn }' }
+
+  - name: storage-get-public-url
+    description: Get the public URL for an object in a public bucket. No auth, no expiration.
+    inputs:
+      bucket: { type: string, required: true }
+      path: { type: string, required: true }
+    outputs:
+      result: { type: object, description: '{ publicUrl }' }
+
+  - name: storage-move
+    description: Rename a file within a bucket (atomic).
+    inputs:
+      bucket: { type: string, required: true }
+      path: { type: string, required: true, description: Source path }
+      destination-path: { type: string, required: true, description: Target path }
+    outputs:
+      result: { type: object, description: '{ from, to, message }' }
+
+  - name: storage-copy
+    description: Copy a file to a new path within a bucket.
+    inputs:
+      bucket: { type: string, required: true }
+      path: { type: string, required: true, description: Source path }
+      destination-path: { type: string, required: true, description: Target path }
+    outputs:
+      result: { type: object, description: '{ from, to, destinationPath }' }
+
+  # ───── Functions ─────
+  - name: invoke-function
+    description: Invoke a deployed Supabase Edge Function and return its response.
+    inputs:
+      function-name: { type: string, required: true }
+      function-body:
+        {
+          type: string,
+          required: false,
+          description: Body as JSON (parsed) or plain string (passed through),
+        }
+      function-headers: { type: string, required: false, description: Headers as JSON object }
+    outputs:
+      result: { type: object, description: '{ response: <function return> }' }
 
 # ── Display metadata ───────────────────────────────────────────────────
 #

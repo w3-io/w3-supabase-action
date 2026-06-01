@@ -2,6 +2,15 @@ import * as core from '@actions/core'
 import { createCommandRouter, setJsonOutput, handleError } from '@w3-io/action-core'
 import { SupabaseSdkClient, SupabaseError, parseJsonInput } from './client.js'
 
+// Mask any session tokens before they hit $GITHUB_OUTPUT or run logs.
+// Without this, downstream `run:` steps that echo outputs.result would
+// leak the access_token AND the long-lived refresh_token.
+function maskSession(session) {
+  if (!session) return
+  if (session.access_token) core.setSecret(session.access_token)
+  if (session.refresh_token) core.setSecret(session.refresh_token)
+}
+
 /**
  * W3 Supabase Action — command dispatch.
  *
@@ -30,10 +39,18 @@ function getString(name, { required = false, defaultValue = '' } = {}) {
   return v === '' && defaultValue !== '' ? defaultValue : v
 }
 
+// Boolean parser that accepts YAML-1.2 truthy/falsy variants. Raises on
+// truly unexpected values rather than silently defaulting to false.
 function getBool(name, defaultValue = false) {
   const raw = core.getInput(name)
   if (raw === '' || raw === undefined) return defaultValue
-  return raw === 'true'
+  const v = raw.toLowerCase()
+  if (['true', 't', 'yes', 'y', '1', 'on'].includes(v)) return true
+  if (['false', 'f', 'no', 'n', '0', 'off'].includes(v)) return false
+  throw new SupabaseError(
+    'INVALID_BOOL',
+    `Input '${name}' must be a boolean (true/false), got: ${raw}`,
+  )
 }
 
 const handlers = {
@@ -147,6 +164,7 @@ const handlers = {
       }),
       redirectTo: getString('redirect-to') || undefined,
     })
+    maskSession(result.session)
     setJsonOutput('result', result)
   },
 
@@ -156,6 +174,7 @@ const handlers = {
       email: getString('email', { required: true }),
       password: getString('password', { required: true }),
     })
+    maskSession(result.session)
     setJsonOutput('result', result)
   },
 

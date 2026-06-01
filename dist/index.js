@@ -51971,7 +51971,14 @@ const FILTER_OPS = new Set([
 function applyFilter(query, filter) {
   if (!filter || Object.keys(filter).length === 0) return query
   for (const [column, ops] of Object.entries(filter)) {
-    if (ops === null || typeof ops !== 'object') {
+    // {col: null} shorthand → SQL: col IS NULL.
+    // PostgREST .eq(col, null) does NOT match nulls (Postgres semantics),
+    // so we explicitly dispatch to .is().
+    if (ops === null) {
+      query = query.is(column, null)
+      continue
+    }
+    if (typeof ops !== 'object') {
       query = query.eq(column, ops)
       continue
     }
@@ -51979,7 +51986,7 @@ function applyFilter(query, filter) {
       if (!FILTER_OPS.has(op)) {
         throw new SupabaseError(
           'INVALID_FILTER',
-          `Unsupported filter operator '${op}' on column '${column}'. Allowed: ${Array.from(FILTER_OPS).join(', ')}`,
+          `Unsupported filter operator '${op}' on column '${column}'. See docs for the supported list.`,
         )
       }
       query = query[op](column, value)
@@ -52158,13 +52165,23 @@ class SupabaseSdkClient {
         'auth-update-user requires at least one of: email, password, user-metadata',
       )
     }
-    // Set the JWT on the client so updateUser updates the right user.
-    await this.client.auth.setSession({ access_token: jwt, refresh_token: '' })
+    // Resolve user id from JWT, then update via admin API. Avoids the
+    // setSession({access_token, refresh_token:''}) trick which mutates
+    // global client state and is rejected by newer SDK versions.
+    const { data: userData, error: getErr } = await this.client.auth.getUser(jwt)
+    if (getErr) throw translateError(getErr, 'AUTH_UPDATE_USER_FAILED')
+    const userId = userData?.user?.id
+    if (!userId) {
+      throw new SupabaseError('AUTH_UPDATE_USER_FAILED', 'Could not resolve user id from JWT')
+    }
     const updates = {}
     if (email) updates.email = email
     if (password) updates.password = password
-    if (userMetadata && Object.keys(userMetadata).length > 0) updates.data = userMetadata
-    const { data, error } = await this.client.auth.updateUser(updates)
+    // Admin API uses `user_metadata`, not the regular updateUser's `data`.
+    if (userMetadata && Object.keys(userMetadata).length > 0) {
+      updates.user_metadata = userMetadata
+    }
+    const { data, error } = await this.client.auth.admin.updateUserById(userId, updates)
     if (error) throw translateError(error, 'AUTH_UPDATE_USER_FAILED')
     return { user: data.user }
   }
@@ -52299,6 +52316,15 @@ class SupabaseSdkClient {
 
 
 
+// Mask any session tokens before they hit $GITHUB_OUTPUT or run logs.
+// Without this, downstream `run:` steps that echo outputs.result would
+// leak the access_token AND the long-lived refresh_token.
+function maskSession(session) {
+  if (!session) return
+  if (session.access_token) lib_core.setSecret(session.access_token)
+  if (session.refresh_token) lib_core.setSecret(session.refresh_token)
+}
+
 /**
  * W3 Supabase Action — command dispatch.
  *
@@ -52327,10 +52353,18 @@ function getString(name, { required = false, defaultValue = '' } = {}) {
   return v === '' && defaultValue !== '' ? defaultValue : v
 }
 
+// Boolean parser that accepts YAML-1.2 truthy/falsy variants. Raises on
+// truly unexpected values rather than silently defaulting to false.
 function getBool(name, defaultValue = false) {
   const raw = lib_core.getInput(name)
   if (raw === '' || raw === undefined) return defaultValue
-  return raw === 'true'
+  const v = raw.toLowerCase()
+  if (['true', 't', 'yes', 'y', '1', 'on'].includes(v)) return true
+  if (['false', 'f', 'no', 'n', '0', 'off'].includes(v)) return false
+  throw new SupabaseError(
+    'INVALID_BOOL',
+    `Input '${name}' must be a boolean (true/false), got: ${raw}`,
+  )
 }
 
 const handlers = {
@@ -52444,6 +52478,7 @@ const handlers = {
       }),
       redirectTo: getString('redirect-to') || undefined,
     })
+    maskSession(result.session)
     setJsonOutput('result', result)
   },
 
@@ -52453,6 +52488,7 @@ const handlers = {
       email: getString('email', { required: true }),
       password: getString('password', { required: true }),
     })
+    maskSession(result.session)
     setJsonOutput('result', result)
   },
 
