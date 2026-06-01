@@ -13,11 +13,10 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
-    # Reads @w3-io/action-lint from GitHub Packages on every npm/npx call.
-    # GITHUB_TOKEN only has read:packages for the same repo; cross-repo
-    # private packages need a PAT. See W3_NPM_TOKEN repo secret.
+    # @w3-io/action-core is published as a public GitHub Packages package,
+    # so the default GITHUB_TOKEN's read:packages scope is sufficient.
     env:
-      NODE_AUTH_TOKEN: ${{ secrets.W3_NPM_TOKEN }}
+      NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
