@@ -1,0 +1,63 @@
+# Artifact storage: generate a file, upload to Supabase Storage,
+# return a time-limited signed URL for the end user.
+#
+# Pattern: many workflows produce artifacts (reports, exports, receipts)
+# that need to be shared with a single user. Supabase Storage with
+# signed URLs is a clean fit — no SDK auth on the consumer side, the
+# URL expires automatically.
+
+name: Generate and share a report
+
+on:
+  workflow_dispatch:
+    inputs:
+      user_id:
+        description: User who requested the report (used in path)
+        required: true
+      report_id:
+        description: Unique report identifier
+        required: true
+
+jobs:
+  generate-and-share:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Render the report
+        id: render
+        run: |
+          # In a real workflow this calls a PDF renderer, a Python
+          # script, or another action. Here we just create a small
+          # binary blob and base64-encode it for transport.
+          echo "Report for ${{ inputs.user_id }}" > /tmp/report.pdf
+          PDF_BASE64=$(base64 < /tmp/report.pdf | tr -d '\n')
+          echo "pdf_base64=$PDF_BASE64" >> "$GITHUB_OUTPUT"
+
+      - name: Upload to Supabase Storage
+        id: upload
+        uses: w3-io/w3-supabase-action@v1
+        with:
+          command: storage-upload
+          url: ${{ secrets.SUPABASE_URL }}
+          key: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          bucket: reports
+          path: ${{ inputs.user_id }}/${{ inputs.report_id }}.pdf
+          file-content: ${{ steps.render.outputs.pdf_base64 }}
+          content-type: application/pdf
+
+      - name: Create a 1-hour signed URL
+        id: signed
+        uses: w3-io/w3-supabase-action@v1
+        with:
+          command: storage-get-signed-url
+          url: ${{ secrets.SUPABASE_URL }}
+          key: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          bucket: reports
+          path: ${{ fromJSON(steps.upload.outputs.result).path }}
+          expires-in: '3600'
+
+      - name: Notify the user (out-of-band)
+        run: |
+          URL=$(echo '${{ steps.signed.outputs.result }}' | jq -r '.signedUrl')
+          echo "Notify user ${{ inputs.user_id }} that their report is ready:"
+          echo "  $URL"
+          # Hook this up to email / Slack / push notification action.

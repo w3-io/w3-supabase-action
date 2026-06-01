@@ -1,0 +1,73 @@
+# Audit log: every workflow run appends a structured row to a
+# Supabase table for compliance + retrospective debugging.
+#
+# Pattern: place audit logging as the first step (entered) and the
+# last step (completed / failed). Workflows always leave a trail —
+# useful for SOC2 audits, customer support trace requests, and
+# debugging "why did this run differently."
+
+name: Workflow with audit logging
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: Logical operation name
+        required: true
+      payload:
+        description: JSON payload for traceability
+        required: false
+
+jobs:
+  audited:
+    runs-on: ubuntu-latest
+    outputs:
+      run_id: ${{ steps.start.outputs.run_id }}
+    steps:
+      - name: Audit: workflow started
+        id: start
+        uses: w3-io/w3-supabase-action@v1
+        with:
+          command: insert
+          url: ${{ secrets.SUPABASE_URL }}
+          key: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          table: workflow_audit
+          data: |
+            {
+              "workflow": "${{ github.workflow }}",
+              "run_id": "${{ github.run_id }}",
+              "actor": "${{ github.actor }}",
+              "operation": "${{ inputs.operation }}",
+              "payload": ${{ toJSON(inputs.payload) }},
+              "status": "started",
+              "started_at": "now()"
+            }
+
+      # Your actual workflow steps go here. The example just sleeps
+      # to represent doing real work.
+      - name: Do the work
+        run: sleep 5
+
+      - name: Audit: workflow completed
+        if: success()
+        uses: w3-io/w3-supabase-action@v1
+        with:
+          command: update
+          url: ${{ secrets.SUPABASE_URL }}
+          key: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          table: workflow_audit
+          filter: '{"run_id":{"eq":"${{ github.run_id }}"}}'
+          data: |
+            { "status": "completed", "completed_at": "now()" }
+
+      - name: Audit: workflow failed
+        if: failure()
+        uses: w3-io/w3-supabase-action@v1
+        with:
+          command: update
+          url: ${{ secrets.SUPABASE_URL }}
+          key: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          table: workflow_audit
+          filter: '{"run_id":{"eq":"${{ github.run_id }}"}}'
+          data: |
+            { "status": "failed", "completed_at": "now()" }

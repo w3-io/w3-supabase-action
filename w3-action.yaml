@@ -94,3 +94,122 @@ commands:
 #       chain_explorer:                            # optional; auto-wired by tx_hash_path
 #         ethereum: "https://etherscan.io/tx/{{tx_hash}}"
 #         base:     "https://basescan.org/tx/{{tx_hash}}"
+
+# ── Display metadata ───────────────────────────────────────────────────
+#
+# Drives branded card rendering in W3 UIs (Explorer, runbooks,
+# MCP-aware chat). Renderers fall back to generic widgets for any
+# command without an entry here. Schema: docs/display-schema.md.
+
+display:
+  brand:
+    name: Supabase
+    short_name: Supabase
+    description: Postgres + Auth + Storage + Edge Functions for workflows
+    logo: https://raw.githubusercontent.com/w3-io/w3-supabase-action/main/assets/logo.svg
+    color: '#3ECF8E'
+
+  commands:
+    # ── Database ──
+    query:
+      icon: chart
+      title_template: 'Query {{ inputs.table }}'
+      subtitle_template: "{{ outputs.result.count | default: 0 }} row{{ outputs.result.count == 1 | default: '' }}"
+      summary:
+        - { label: Table, value: '{{ inputs.table }}' }
+        - { label: Schema, value: "{{ inputs.schema | default: 'public' }}" }
+        - { label: Rows returned, value: '{{ outputs.result.count | default: 0 }}' }
+
+    insert:
+      icon: send
+      title_template: 'Insert into {{ inputs.table }}'
+      summary:
+        - { label: Table, value: '{{ inputs.table }}' }
+        - { label: Rows inserted, value: '{{ outputs.result.count | default: 0 }}' }
+
+    upsert:
+      icon: send
+      title_template: 'Upsert into {{ inputs.table }}'
+      summary:
+        - { label: Table, value: '{{ inputs.table }}' }
+        - { label: Conflict columns, value: "{{ inputs.on-conflict | default: '(primary key)' }}" }
+        - { label: Rows affected, value: '{{ outputs.result.count | default: 0 }}' }
+
+    update:
+      icon: send
+      title_template: 'Update {{ inputs.table }}'
+      summary:
+        - { label: Table, value: '{{ inputs.table }}' }
+        - { label: Rows updated, value: '{{ outputs.result.count | default: 0 }}' }
+
+    delete:
+      icon: send
+      title_template: 'Delete from {{ inputs.table }}'
+      summary:
+        - { label: Table, value: '{{ inputs.table }}' }
+        - { label: Rows deleted, value: '{{ outputs.result.count | default: 0 }}' }
+
+    count:
+      icon: chart
+      title_template: 'Count rows in {{ inputs.table }}'
+      summary:
+        - { label: Table, value: '{{ inputs.table }}' }
+        - { label: Count, value: '{{ outputs.result.count | default: 0 }}' }
+
+    rpc:
+      icon: send
+      title_template: 'Call {{ inputs.rpc-name }}()'
+      subtitle_template: 'Postgres stored procedure'
+      summary:
+        - { label: Function, value: '{{ inputs.rpc-name }}' }
+        - { label: Schema, value: "{{ inputs.schema | default: 'public' }}" }
+
+    # ── Auth ──
+    auth-verify-jwt:
+      icon: check
+      title_template: Verify JWT
+      subtitle_template: "{{ outputs.result.user.email | default: 'no user' }}"
+      summary:
+        - { label: Valid, value: '{{ outputs.result.valid | default: false }}' }
+        - { label: User, value: "{{ outputs.result.user.email | default: '—' }}" }
+
+    auth-sign-in-password:
+      icon: lock
+      title_template: Sign in
+      subtitle_template: '{{ inputs.email }}'
+      summary:
+        - { label: Email, value: '{{ inputs.email }}' }
+
+    auth-sign-up:
+      icon: lock
+      title_template: Sign up
+      subtitle_template: '{{ inputs.email }}'
+
+    # ── Storage ──
+    storage-upload:
+      icon: vault
+      title_template: 'Upload to {{ inputs.bucket }}'
+      subtitle_template: '{{ inputs.path }}'
+      summary:
+        - { label: Bucket, value: '{{ inputs.bucket }}' }
+        - { label: Path, value: '{{ inputs.path }}' }
+        - {
+            label: Content type,
+            value: "{{ inputs.content-type | default: 'application/octet-stream' }}",
+          }
+
+    storage-get-signed-url:
+      icon: vault
+      title_template: 'Signed URL for {{ inputs.path }}'
+      subtitle_template: "Expires in {{ inputs.expires-in | default: '3600' }}s"
+      summary:
+        - { label: Bucket, value: '{{ inputs.bucket }}' }
+        - { label: Path, value: '{{ inputs.path }}' }
+
+    # ── Functions ──
+    invoke-function:
+      icon: send
+      title_template: 'Invoke {{ inputs.function-name }}'
+      subtitle_template: 'Supabase Edge Function'
+      summary:
+        - { label: Function, value: '{{ inputs.function-name }}' }

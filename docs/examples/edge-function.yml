@@ -1,0 +1,47 @@
+# Edge Function invocation: call a deployed Supabase Edge Function
+# for pre-processing or enrichment before the rest of the workflow.
+#
+# Pattern: Edge Functions are good for transformations that benefit
+# from running close to your Postgres database (low-latency DB reads,
+# secret access, etc.) — workflows invoke them as one step among many.
+
+name: Enrich transaction via Edge Function
+
+on:
+  workflow_dispatch:
+    inputs:
+      tx_hash:
+        description: Transaction hash to enrich
+        required: true
+
+jobs:
+  enrich:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call the enrich-transaction Edge Function
+        id: enriched
+        uses: w3-io/w3-supabase-action@v1
+        with:
+          command: invoke-function
+          url: ${{ secrets.SUPABASE_URL }}
+          key: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          function-name: enrich-transaction
+          function-body: |
+            {
+              "tx_hash": "${{ inputs.tx_hash }}",
+              "include_logs": true
+            }
+          function-headers: |
+            {
+              "x-trace-id": "${{ github.run_id }}"
+            }
+
+      - name: Persist the enriched record
+        uses: w3-io/w3-supabase-action@v1
+        with:
+          command: upsert
+          url: ${{ secrets.SUPABASE_URL }}
+          key: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          table: transactions
+          data: ${{ steps.enriched.outputs.result }}
+          on-conflict: tx_hash

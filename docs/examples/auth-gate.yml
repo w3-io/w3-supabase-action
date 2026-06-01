@@ -1,0 +1,58 @@
+# Auth gate: only proceed if the caller's JWT is valid and the user has
+# the required role in their app_metadata.
+#
+# Pattern: workflows triggered by user requests can authenticate the
+# caller before performing privileged operations. The Supabase JWT
+# carries user_metadata + app_metadata that downstream steps can branch on.
+
+name: Privileged operation with JWT gate
+
+on:
+  workflow_dispatch:
+    inputs:
+      user_jwt:
+        description: Supabase JWT from the calling app
+        required: true
+      target_record_id:
+        description: Record to operate on
+        required: true
+
+jobs:
+  privileged:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify caller's JWT
+        id: verify
+        uses: w3-io/w3-supabase-action@v1
+        with:
+          command: auth-verify-jwt
+          url: ${{ secrets.SUPABASE_URL }}
+          key: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          jwt: ${{ inputs.user_jwt }}
+
+      # Branch on a role / claim in the user's app_metadata.
+      # auth-verify-jwt raises JWT_EXPIRED / JWT_INVALID on failure;
+      # the workflow stops there before this gate even runs.
+      - name: Check role
+        id: role
+        run: |
+          ROLE=$(echo '${{ steps.verify.outputs.result }}' | jq -r '.user.app_metadata.role // "none"')
+          echo "role=$ROLE" >> "$GITHUB_OUTPUT"
+          if [ "$ROLE" != "admin" ] && [ "$ROLE" != "operator" ]; then
+            echo "::error::caller role '$ROLE' is not authorized for this operation"
+            exit 1
+          fi
+
+      - name: Perform the privileged update
+        uses: w3-io/w3-supabase-action@v1
+        with:
+          command: update
+          url: ${{ secrets.SUPABASE_URL }}
+          key: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          table: sensitive_records
+          filter: '{"id":{"eq":${{ inputs.target_record_id }}}}'
+          data: |
+            {
+              "verified_by": "${{ fromJSON(steps.verify.outputs.result).user.email }}",
+              "verified_at": "now()"
+            }

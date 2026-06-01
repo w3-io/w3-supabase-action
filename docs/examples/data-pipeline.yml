@@ -1,0 +1,50 @@
+# Data pipeline: write workflow output into a Supabase table.
+#
+# Pattern: a scheduled workflow gathers data (here, a list of pending
+# orders from somewhere upstream) and lands it in Supabase for the
+# operations team to query in their dashboards.
+
+name: Sync pending orders to Supabase
+
+on:
+  workflow_dispatch:
+    inputs:
+      batch_id:
+        description: Batch identifier for traceability
+        required: true
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch pending orders (upstream)
+        id: fetch
+        run: |
+          # In a real workflow this comes from an API, a queue, or
+          # another action step. Here we synthesize for the example.
+          echo 'rows=[{"order_id":"o-1","amount":100,"currency":"USD"},{"order_id":"o-2","amount":250,"currency":"EUR"}]' >> "$GITHUB_OUTPUT"
+
+      - name: Upsert orders into Supabase
+        id: upsert
+        uses: w3-io/w3-supabase-action@v1
+        with:
+          command: upsert
+          url: ${{ secrets.SUPABASE_URL }}
+          key: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          table: orders
+          data: ${{ steps.fetch.outputs.rows }}
+          on-conflict: order_id
+
+      - name: Log batch summary
+        uses: w3-io/w3-supabase-action@v1
+        with:
+          command: insert
+          url: ${{ secrets.SUPABASE_URL }}
+          key: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          table: sync_batches
+          data: |
+            {
+              "batch_id": "${{ inputs.batch_id }}",
+              "row_count": ${{ fromJSON(steps.upsert.outputs.result).count }},
+              "completed_at": "now()"
+            }
