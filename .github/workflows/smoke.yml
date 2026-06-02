@@ -1,0 +1,150 @@
+name: Smoke
+
+# GHA-level smoke test: invokes the action via `uses: ./` against the
+# real Supabase project. Complements integration.yml (which exercises
+# the SDK directly). This catches anything in the input parsing,
+# dispatch, output formatting, or dist/ bundling layers that the
+# SDK-direct tests can't see.
+#
+# Same triggers as integration.yml — workflow_dispatch + PRs that
+# touch src/ or dist/. Skipped on forks (no secrets).
+#
+# Required repo secrets: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+# Required one-time setup: apply test/integration/seed.sql
+
+on:
+  workflow_dispatch: {}
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'dist/**'
+      - 'action.yml'
+      - '.github/workflows/smoke.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    env:
+      RUN_TAG: ${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # ─── Database: insert → query → count → rpc → update → delete ───
+
+      - name: insert (creates one row tagged with this run)
+        id: insert
+        uses: ./
+        with:
+          command: insert
+          url: ${{ secrets.SUPABASE_URL }}
+          key: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          table: _w3_test_widgets
+          data: |
+            { "name": "smoke", "status": "pending", "metadata": { "smoke_run": "${{ env.RUN_TAG }}" } }
+
+      - name: assert insert returned one row + valid id
+        env:
+          RESULT: ${{ steps.insert.outputs.result }}
+        run: |
+          echo "$RESULT" | jq -e '.count == 1 and (.rows[0].id | type == "number")' > /dev/null
+          echo "insert OK"
+
+      - name: query single-row by id
+        id: query
+        uses: ./
+        with:
+          command: query
+          url: ${{ secrets.SUPABASE_URL }}
+          key: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          table: _w3_test_widgets
+          filter: '{"metadata":{"contains":{"smoke_run":"${{ env.RUN_TAG }}"}}}'
+          single-row: 'true'
+
+      - name: 'assert query returned { row, count: 1 }'
+        env:
+          RESULT: ${{ steps.query.outputs.result }}
+        run: |
+          echo "$RESULT" | jq -e '.count == 1 and .row.name == "smoke"' > /dev/null
+          echo "query single-row OK"
+
+      - name: 'rpc tally → assert { data: { row_count } }'
+        id: rpc
+        uses: ./
+        with:
+          command: rpc
+          url: ${{ secrets.SUPABASE_URL }}
+          key: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          rpc-name: _w3_test_tally
+          rpc-params: '{}'
+
+      - name: assert rpc unwrap shape (data, not result)
+        env:
+          RESULT: ${{ steps.rpc.outputs.result }}
+        run: |
+          echo "$RESULT" | jq -e '.data.row_count != null' > /dev/null
+          if echo "$RESULT" | jq -e 'has("result")' > /dev/null; then
+            echo "rpc returned legacy { result } shape — regression"; exit 1
+          fi
+          echo "rpc OK"
+
+      # ─── Storage: upload (no upsert) → download → delete ───
+
+      - name: storage-upload (no upsert)
+        uses: ./
+        with:
+          command: storage-upload
+          url: ${{ secrets.SUPABASE_URL }}
+          key: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          bucket: _w3-test
+          path: smoke/${{ env.RUN_TAG }}.txt
+          file-content: aGVsbG8gdzM=
+
+      - name: storage-download → assert round-trip
+        id: download
+        uses: ./
+        with:
+          command: storage-download
+          url: ${{ secrets.SUPABASE_URL }}
+          key: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          bucket: _w3-test
+          path: smoke/${{ env.RUN_TAG }}.txt
+
+      - name: assert download body decodes to "hello w3"
+        env:
+          RESULT: ${{ steps.download.outputs.result }}
+        run: |
+          body=$(echo "$RESULT" | jq -r '.contentBase64' | base64 -d)
+          test "$body" = "hello w3" || { echo "got: $body"; exit 1; }
+          echo "storage round-trip OK"
+
+      # ─── Cleanup (best-effort) ───
+
+      - name: cleanup row
+        if: always()
+        uses: ./
+        with:
+          command: delete
+          url: ${{ secrets.SUPABASE_URL }}
+          key: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          table: _w3_test_widgets
+          filter: '{"metadata":{"contains":{"smoke_run":"${{ env.RUN_TAG }}"}}}'
+          return-rows: 'false'
+
+      - name: cleanup object
+        if: always()
+        uses: ./
+        with:
+          command: storage-delete
+          url: ${{ secrets.SUPABASE_URL }}
+          key: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          bucket: _w3-test
+          path: smoke/${{ env.RUN_TAG }}.txt

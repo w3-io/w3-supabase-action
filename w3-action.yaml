@@ -1,7 +1,7 @@
 kind: integration
 partner: supabase
 name: Supabase Integration
-version: 0.1.0
+version: 0.2.0
 repo: w3-io/w3-supabase-action
 
 description: >
