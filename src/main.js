@@ -26,7 +26,19 @@ function maskSession(session) {
  *   3. Document in action.yml, w3-action.yaml, README.md
  */
 
+const VALID_KEY_TYPES = new Set(['service-role', 'anon', ''])
+
 function getClient() {
+  // key-type is informational today but we validate it now so typos
+  // (e.g. "anonymous", "service") fail fast instead of being silently
+  // ignored — caught at the start of the run, not at the API call.
+  const keyType = core.getInput('key-type')
+  if (!VALID_KEY_TYPES.has(keyType)) {
+    throw new SupabaseError(
+      'INVALID_KEY_TYPE',
+      `key-type must be 'service-role' or 'anon' (got: ${keyType})`,
+    )
+  }
   return new SupabaseSdkClient({
     url: core.getInput('url', { required: true }),
     key: core.getInput('key', { required: true }),
@@ -69,6 +81,7 @@ const handlers = {
       order: parseJsonInput('order', core.getInput('order'), { allowEmpty: true }),
       limit: getString('limit'),
       offset: getString('offset'),
+      singleRow: getBool('single-row', false),
     })
     setJsonOutput('result', result)
   },
@@ -272,7 +285,11 @@ const handlers = {
     const client = getClient()
     const result = await client.storageDelete({
       bucket: getString('bucket', { required: true }),
-      path: getString('path', { required: true }),
+      path: getString('path'),
+      // `paths` is a JSON array; if absent, falls back to single `path`.
+      paths: parseJsonInput('paths', core.getInput('paths'), {
+        allowEmpty: true,
+      }),
     })
     setJsonOutput('result', result)
   },

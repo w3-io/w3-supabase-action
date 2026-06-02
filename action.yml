@@ -62,6 +62,13 @@ inputs:
     description: 'Rows to skip'
     required: false
     default: ''
+  single-row:
+    description: >
+      For query: return at most one row as { row, count }. Uses
+      .maybeSingle() — zero matches return row=null (no error). Use
+      when you expect 0 or 1 rows (e.g. lookup by primary key).
+    required: false
+    default: 'false'
   data:
     description: 'Row(s) to insert/upsert/update as JSON (single object or array of objects)'
     required: false
@@ -117,6 +124,13 @@ inputs:
     default: ''
   path:
     description: 'File path within bucket (e.g. user-123/avatar.png)'
+    required: false
+    default: ''
+  paths:
+    description: >
+      For storage-delete: JSON array of file paths to remove in one
+      call. Example: ["a/x.png","b/y.png"]. If both path and paths are
+      set, paths wins. Use this when removing many objects at once.
     required: false
     default: ''
   file-content:

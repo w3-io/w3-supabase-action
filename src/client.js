@@ -154,7 +154,16 @@ export class SupabaseSdkClient {
 
   // ─────────────────────────── Database ───────────────────────────
 
-  async query({ table, schema = 'public', filter, select = '*', order, limit, offset }) {
+  async query({
+    table,
+    schema = 'public',
+    filter,
+    select = '*',
+    order,
+    limit,
+    offset,
+    singleRow = false,
+  }) {
     requireInput('table', table)
     let q = this.client.schema(schema).from(table).select(select)
     q = applyFilter(q, filter || {})
@@ -170,6 +179,14 @@ export class SupabaseSdkClient {
       q = q.range(off, off + lim - 1)
     } else if (hasLimit) {
       q = q.limit(Number(limit))
+    }
+    // singleRow=true returns { row, count } instead of { rows[], count }.
+    // Uses .maybeSingle() so zero matches return row=null instead of
+    // raising PGRST116 — workflow code can then branch on `row == null`.
+    if (singleRow) {
+      const { data, error } = await q.maybeSingle()
+      if (error) throw translateError(error, 'QUERY_FAILED')
+      return { row: data, count: data ? 1 : 0 }
     }
     const { data, error } = await q
     if (error) throw translateError(error, 'QUERY_FAILED')
@@ -392,10 +409,16 @@ export class SupabaseSdkClient {
     return { files: data }
   }
 
-  async storageDelete({ bucket, path }) {
+  async storageDelete({ bucket, path, paths }) {
     requireInput('bucket', bucket)
-    requireInput('path', path)
-    const { data, error } = await this.client.storage.from(bucket).remove([path])
+    // Accept either single `path` or an array `paths` — the SDK takes
+    // an array regardless, so let workflow authors batch-delete in one
+    // call when they have many objects to remove.
+    let toRemove
+    if (Array.isArray(paths) && paths.length > 0) toRemove = paths
+    else if (path) toRemove = [path]
+    else throw new SupabaseError('MISSING_INPUT', "'path' or 'paths' is required")
+    const { data, error } = await this.client.storage.from(bucket).remove(toRemove)
     if (error) throw translateError(error, 'STORAGE_DELETE_FAILED')
     return { deleted: data }
   }
@@ -432,7 +455,9 @@ export class SupabaseSdkClient {
     requireInput('destination-path', destinationPath)
     const { data, error } = await this.client.storage.from(bucket).copy(path, destinationPath)
     if (error) throw translateError(error, 'STORAGE_COPY_FAILED')
-    return { from: path, to: destinationPath, path: data?.path }
+    // `path` would shadow the source path parameter in the output —
+    // use `copiedPath` so consumers can tell which is which.
+    return { from: path, to: destinationPath, copiedPath: data?.path }
   }
 
   // ─────────────────────────── Functions ───────────────────────────

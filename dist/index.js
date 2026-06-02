@@ -52023,7 +52023,16 @@ class SupabaseSdkClient {
 
   // ─────────────────────────── Database ───────────────────────────
 
-  async query({ table, schema = 'public', filter, select = '*', order, limit, offset }) {
+  async query({
+    table,
+    schema = 'public',
+    filter,
+    select = '*',
+    order,
+    limit,
+    offset,
+    singleRow = false,
+  }) {
     client_requireInput('table', table)
     let q = this.client.schema(schema).from(table).select(select)
     q = applyFilter(q, filter || {})
@@ -52039,6 +52048,14 @@ class SupabaseSdkClient {
       q = q.range(off, off + lim - 1)
     } else if (hasLimit) {
       q = q.limit(Number(limit))
+    }
+    // singleRow=true returns { row, count } instead of { rows[], count }.
+    // Uses .maybeSingle() so zero matches return row=null instead of
+    // raising PGRST116 — workflow code can then branch on `row == null`.
+    if (singleRow) {
+      const { data, error } = await q.maybeSingle()
+      if (error) throw translateError(error, 'QUERY_FAILED')
+      return { row: data, count: data ? 1 : 0 }
     }
     const { data, error } = await q
     if (error) throw translateError(error, 'QUERY_FAILED')
@@ -52261,10 +52278,16 @@ class SupabaseSdkClient {
     return { files: data }
   }
 
-  async storageDelete({ bucket, path }) {
+  async storageDelete({ bucket, path, paths }) {
     client_requireInput('bucket', bucket)
-    client_requireInput('path', path)
-    const { data, error } = await this.client.storage.from(bucket).remove([path])
+    // Accept either single `path` or an array `paths` — the SDK takes
+    // an array regardless, so let workflow authors batch-delete in one
+    // call when they have many objects to remove.
+    let toRemove
+    if (Array.isArray(paths) && paths.length > 0) toRemove = paths
+    else if (path) toRemove = [path]
+    else throw new SupabaseError('MISSING_INPUT', "'path' or 'paths' is required")
+    const { data, error } = await this.client.storage.from(bucket).remove(toRemove)
     if (error) throw translateError(error, 'STORAGE_DELETE_FAILED')
     return { deleted: data }
   }
@@ -52301,7 +52324,9 @@ class SupabaseSdkClient {
     client_requireInput('destination-path', destinationPath)
     const { data, error } = await this.client.storage.from(bucket).copy(path, destinationPath)
     if (error) throw translateError(error, 'STORAGE_COPY_FAILED')
-    return { from: path, to: destinationPath, path: data?.path }
+    // `path` would shadow the source path parameter in the output —
+    // use `copiedPath` so consumers can tell which is which.
+    return { from: path, to: destinationPath, copiedPath: data?.path }
   }
 
   // ─────────────────────────── Functions ───────────────────────────
@@ -52349,7 +52374,19 @@ function maskSession(session) {
  *   3. Document in action.yml, w3-action.yaml, README.md
  */
 
+const VALID_KEY_TYPES = new Set(['service-role', 'anon', ''])
+
 function getClient() {
+  // key-type is informational today but we validate it now so typos
+  // (e.g. "anonymous", "service") fail fast instead of being silently
+  // ignored — caught at the start of the run, not at the API call.
+  const keyType = lib_core.getInput('key-type')
+  if (!VALID_KEY_TYPES.has(keyType)) {
+    throw new SupabaseError(
+      'INVALID_KEY_TYPE',
+      `key-type must be 'service-role' or 'anon' (got: ${keyType})`,
+    )
+  }
   return new SupabaseSdkClient({
     url: lib_core.getInput('url', { required: true }),
     key: lib_core.getInput('key', { required: true }),
@@ -52392,6 +52429,7 @@ const handlers = {
       order: client_parseJsonInput('order', lib_core.getInput('order'), { allowEmpty: true }),
       limit: getString('limit'),
       offset: getString('offset'),
+      singleRow: getBool('single-row', false),
     })
     setJsonOutput('result', result)
   },
@@ -52595,7 +52633,11 @@ const handlers = {
     const client = getClient()
     const result = await client.storageDelete({
       bucket: getString('bucket', { required: true }),
-      path: getString('path', { required: true }),
+      path: getString('path'),
+      // `paths` is a JSON array; if absent, falls back to single `path`.
+      paths: client_parseJsonInput('paths', lib_core.getInput('paths'), {
+        allowEmpty: true,
+      }),
     })
     setJsonOutput('result', result)
   },

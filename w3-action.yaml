@@ -58,8 +58,18 @@ commands:
         }
       limit: { type: string, required: false, description: Max rows }
       offset: { type: string, required: false, description: Rows to skip }
+      single-row:
+        {
+          type: string,
+          required: false,
+          description: 'true → return { row, count } (.maybeSingle); default false',
+        }
     outputs:
-      result: { type: object, description: '{ rows: [...], count: <returned-rows-count> }' }
+      result:
+        type: object
+        description: >
+          { rows: [...], count: <returned-rows-count> } by default, or
+          { row, count } when single-row=true.
 
   - name: insert
     description: Insert one or more rows.
@@ -303,7 +313,7 @@ commands:
       path: { type: string, required: true, description: Source path }
       destination-path: { type: string, required: true, description: Target path }
     outputs:
-      result: { type: object, description: '{ from, to, destinationPath }' }
+      result: { type: object, description: '{ from, to, copiedPath }' }
 
   # ───── Functions ─────
   - name: invoke-function
