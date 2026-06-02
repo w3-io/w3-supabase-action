@@ -61,3 +61,14 @@ $$;
 insert into storage.buckets (id, name, public)
 values ('_w3-test', '_w3-test', false)
 on conflict (id) do nothing;
+
+-- storage.objects has RLS enabled but zero policies on a fresh project,
+-- which means EVERY operation is denied. Even service_role gets rejected
+-- because the storage-api request path doesn't always run as a BYPASSRLS
+-- role. Open the test bucket up explicitly — scoped to this bucket only,
+-- so this seed cannot affect any real data the project later acquires.
+drop policy if exists "_w3-test bucket open for tests" on storage.objects;
+create policy "_w3-test bucket open for tests" on storage.objects
+  for all
+  using (bucket_id = '_w3-test')
+  with check (bucket_id = '_w3-test');
