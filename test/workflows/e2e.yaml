@@ -1,37 +1,165 @@
 # E2E Test Workflow
 #
-# Exercises every command against real APIs/contracts.
+# Exercises representative commands across all 4 subsystems
+# (database, auth, storage, functions) against a real Supabase
+# project, running through the W3 protocol (not GitHub Actions).
+#
 # Run on a local W3 network with:
 #   w3 workflow deploy test/workflows/e2e.yaml
-#   w3 workflow "<name>" trigger
+#   w3 workflow "supabase-e2e" trigger
 #
 # Prerequisites:
 #   - W3 local network running (make dev)
-#   - TODO: list required env vars (e.g., export W3_SECRET_ETHEREUM="0x...")
-#
-# This workflow is NOT run by CI. It's a manual validation tool
-# for proving the action works end-to-end through the W3 protocol.
+#   - W3_SECRET_SUPABASE_URL set to the project URL
+#     (e.g. https://nysprlqskukbozrqkxdl.supabase.co)
+#   - W3_SECRET_SUPABASE_SERVICE_ROLE_KEY set to the service-role JWT
+#   - test/integration/seed.sql applied once in the Supabase SQL editor
+#     (creates public._w3_test_widgets table, _w3_test_tally function,
+#     and the _w3-test storage bucket with an open RLS policy)
 
-name: e2e-test-yourpartner # TODO: change to your action name
-on: workflow_dispatch
+name: supabase-e2e
+on:
+  workflow_dispatch: {}
 
 jobs:
-  reads:
+  # Database CRUD path.
+  database:
     runs-on: ubuntu-latest
     steps:
-      # TODO: Add read-only commands here
-      - name: Example read command
-        uses: w3-io/w3-yourpartner-action@v0
+      - name: insert a row
+        id: insert
+        uses: w3-io/w3-supabase-action@v0
         with:
-          command: example-command
-          # TODO: add required inputs
+          command: insert
+          url: ${{ secrets.SUPABASE_URL }}
+          key: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          table: _w3_test_widgets
+          data: '{"name":"e2e","status":"pending","metadata":{"e2e_run":"${{ github.run_id }}"}}'
 
-  writes:
+      - name: query single-row by run tag
+        uses: w3-io/w3-supabase-action@v0
+        with:
+          command: query
+          url: ${{ secrets.SUPABASE_URL }}
+          key: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          table: _w3_test_widgets
+          filter: '{"metadata":{"contains":{"e2e_run":"${{ github.run_id }}"}}}'
+          single-row: 'true'
+
+      - name: count rows matching filter
+        uses: w3-io/w3-supabase-action@v0
+        with:
+          command: count
+          url: ${{ secrets.SUPABASE_URL }}
+          key: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          table: _w3_test_widgets
+          filter: '{"metadata":{"contains":{"e2e_run":"${{ github.run_id }}"}}}'
+
+      - name: update status
+        uses: w3-io/w3-supabase-action@v0
+        with:
+          command: update
+          url: ${{ secrets.SUPABASE_URL }}
+          key: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          table: _w3_test_widgets
+          filter: '{"metadata":{"contains":{"e2e_run":"${{ github.run_id }}"}}}'
+          data: '{"status":"active"}'
+
+      - name: call rpc function
+        uses: w3-io/w3-supabase-action@v0
+        with:
+          command: rpc
+          url: ${{ secrets.SUPABASE_URL }}
+          key: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          rpc-name: _w3_test_tally
+          rpc-params: '{"filter_status":"active"}'
+
+      - name: cleanup
+        if: always()
+        uses: w3-io/w3-supabase-action@v0
+        with:
+          command: delete
+          url: ${{ secrets.SUPABASE_URL }}
+          key: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          table: _w3_test_widgets
+          filter: '{"metadata":{"contains":{"e2e_run":"${{ github.run_id }}"}}}'
+          return-rows: 'false'
+
+  # Storage round-trip path.
+  storage:
     runs-on: ubuntu-latest
     steps:
-      # TODO: Add write commands here (require credentials)
-      - name: Example write command
-        uses: w3-io/w3-yourpartner-action@v0
+      - name: storage-upload (base64 body)
+        uses: w3-io/w3-supabase-action@v0
         with:
-          command: example-write
-          # TODO: add required inputs
+          command: storage-upload
+          url: ${{ secrets.SUPABASE_URL }}
+          key: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          bucket: _w3-test
+          path: e2e/${{ github.run_id }}.txt
+          file-content: aGVsbG8gZTJl
+          content-type: text/plain
+          storage-upsert: 'true'
+
+      - name: storage-download (asserts the upload landed)
+        uses: w3-io/w3-supabase-action@v0
+        with:
+          command: storage-download
+          url: ${{ secrets.SUPABASE_URL }}
+          key: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          bucket: _w3-test
+          path: e2e/${{ github.run_id }}.txt
+
+      - name: storage-get-signed-url
+        uses: w3-io/w3-supabase-action@v0
+        with:
+          command: storage-get-signed-url
+          url: ${{ secrets.SUPABASE_URL }}
+          key: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          bucket: _w3-test
+          path: e2e/${{ github.run_id }}.txt
+          expires-in: '60'
+
+      - name: storage-copy
+        uses: w3-io/w3-supabase-action@v0
+        with:
+          command: storage-copy
+          url: ${{ secrets.SUPABASE_URL }}
+          key: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          bucket: _w3-test
+          path: e2e/${{ github.run_id }}.txt
+          destination-path: e2e/${{ github.run_id }}-copy.txt
+
+      - name: cleanup (batch delete)
+        if: always()
+        uses: w3-io/w3-supabase-action@v0
+        with:
+          command: storage-delete
+          url: ${{ secrets.SUPABASE_URL }}
+          key: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          bucket: _w3-test
+          paths: '["e2e/${{ github.run_id }}.txt","e2e/${{ github.run_id }}-copy.txt"]'
+
+  # Auth path — exercises sign-up and reset-password. Per-user
+  # admin updates / sign-in are covered in the integration tests
+  # because they need bidirectional token exchange.
+  auth:
+    runs-on: ubuntu-latest
+    steps:
+      - name: auth-sign-up
+        uses: w3-io/w3-supabase-action@v0
+        with:
+          command: auth-sign-up
+          url: ${{ secrets.SUPABASE_URL }}
+          key: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          email: e2e-${{ github.run_id }}@example.com
+          password: e2e-${{ github.run_id }}
+          user-metadata: '{"e2e":true}'
+
+      - name: auth-reset-password (just verifies the call works)
+        uses: w3-io/w3-supabase-action@v0
+        with:
+          command: auth-reset-password
+          url: ${{ secrets.SUPABASE_URL }}
+          key: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          email: e2e-${{ github.run_id }}@example.com
