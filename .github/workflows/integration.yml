@@ -1,0 +1,68 @@
+name: Integration
+
+# Runs the SDK-level integration suite against a real Supabase project.
+# Separated from CI because (a) it needs secrets unavailable on forked
+# PRs, and (b) it's slower and rate-limited.
+#
+# Triggers:
+#   - PRs that touch src/ or test/integration/ (label-gated to keep
+#     forked PRs out)
+#   - Manual dispatch
+#   - Nightly schedule to catch upstream SDK / Supabase regressions
+#
+# Required repo secrets:
+#   - SUPABASE_URL
+#   - SUPABASE_SERVICE_ROLE_KEY
+#
+# Required one-time setup: apply test/integration/seed.sql in the
+# Supabase project's SQL editor before the first run.
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    # 06:17 UTC nightly — catches upstream regressions overnight
+    # without colliding with morning push traffic.
+    - cron: '17 6 * * *'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'test/integration/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/integration.yml'
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: integration-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    # Skip on forks — secrets aren't available there. Maintainers can
+    # re-run by pushing to a branch in the canonical repo or using
+    # workflow_dispatch.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          registry-url: 'https://npm.pkg.github.com'
+          scope: '@w3-io'
+
+      - run: npm ci
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Integration tests
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: node --test test/integration/*.test.js

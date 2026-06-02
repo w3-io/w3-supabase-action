@@ -10,6 +10,7 @@
     "format:check": "prettier --check .",
     "lint": "eslint src/",
     "test": "node --test test/*.test.js",
+    "test:integration": "node --test --env-file=.env.test test/integration/*.test.js",
     "all": "npm run format && npm run lint && npm run test && npm run build"
   },
   "dependencies": {
