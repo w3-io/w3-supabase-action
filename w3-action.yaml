@@ -40,7 +40,10 @@ commands:
         description: >
           PostgREST filter as JSON. Examples: {"id":{"eq":5}}, or
           {"status":{"in":["a","b"]},"created_at":{"gte":"2026-01-01"}}.
-          Use {"col": null} as shorthand for "col IS NULL".
+          Supported operators: eq, neq, gt, gte, lt, lte, like, ilike,
+          is, in, contains, containedBy, rangeGt, rangeGte, rangeLt,
+          rangeLte, rangeAdjacent, overlaps, textSearch. Shorthand:
+          {"col": null} matches rows where col IS NULL.
       select:
         {
           type: string,
@@ -209,7 +212,9 @@ commands:
 
   # ───── Storage ─────
   - name: storage-upload
-    description: Upload a file (base64-encoded). By default overwrites on conflict.
+    description: >
+      Upload a file (base64-encoded). Fails on path collision by default;
+      set storage-upsert=true to overwrite.
     inputs:
       bucket:
         {
@@ -229,7 +234,7 @@ commands:
         {
           type: string,
           required: false,
-          description: 'Overwrite on path collision (default: true)',
+          description: 'Overwrite on path collision (default: false)',
         }
     outputs:
       result: { type: object, description: '{ path, fullPath, id }' }

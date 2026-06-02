@@ -243,6 +243,7 @@ const handlers = {
       path: getString('path', { required: true }),
       fileContentBase64: getString('file-content', { required: true }),
       contentType: getString('content-type', { defaultValue: 'application/octet-stream' }),
+      upsert: getBool('storage-upsert', false),
     })
     setJsonOutput('result', result)
   },
@@ -319,9 +320,20 @@ const handlers = {
 
   'invoke-function': async () => {
     const client = getClient()
+    // Edge Functions accept JSON or raw strings. If function-body parses
+    // as JSON, send the parsed object; otherwise send the raw string.
+    const rawBody = core.getInput('function-body')
+    let body
+    if (rawBody !== '' && rawBody !== undefined) {
+      try {
+        body = JSON.parse(rawBody)
+      } catch {
+        body = rawBody
+      }
+    }
     const result = await client.invokeFunction({
       name: getString('function-name', { required: true }),
-      body: parseJsonInput('function-body', core.getInput('function-body'), { allowEmpty: true }),
+      body,
       headers: parseJsonInput('function-headers', core.getInput('function-headers'), {
         allowEmpty: true,
         defaultValue: {},
@@ -344,3 +356,7 @@ export async function run() {
     }
   }
 }
+
+// Exported for unit tests — exercises the input-parsing layer without
+// running through the full router/SDK stack.
+export { getString, getBool, maskSession, handlers }

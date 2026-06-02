@@ -40,7 +40,10 @@ inputs:
     description: >
       PostgREST filter as JSON. Example: {"id":{"eq":5}} or
       {"status":{"in":["pending","active"]},"created_at":{"gte":"2026-01-01"}}.
-      Supported operators: eq, neq, gt, gte, lt, lte, like, ilike, is, in, contains, containedBy.
+      Supported operators: eq, neq, gt, gte, lt, lte, like, ilike, is, in,
+      contains, containedBy, rangeGt, rangeGte, rangeLt, rangeLte,
+      rangeAdjacent, overlaps, textSearch. Shorthand: {"col": null} matches
+      rows where col IS NULL.
     required: false
     default: '{}'
   select:
@@ -90,7 +93,12 @@ inputs:
     required: false
     default: ''
   user-metadata:
-    description: 'User metadata as JSON (for auth-sign-up, auth-update-user)'
+    description: >
+      User metadata as JSON object. For auth-sign-up, sets the initial
+      metadata. For auth-update-user, replaces the top-level keys
+      provided (shallow merge: omitted keys are preserved, present keys
+      overwrite). To delete a key, omit it from updates — there is no
+      way to clear a key via the admin API.
     required: false
     default: '{}'
   jwt:
@@ -119,6 +127,14 @@ inputs:
     description: 'MIME type of uploaded file (default: "application/octet-stream")'
     required: false
     default: 'application/octet-stream'
+  storage-upsert:
+    description: >
+      For storage-upload: overwrite an existing file at the same path.
+      Default false — uploading to an existing path returns
+      STORAGE_UPLOAD_FAILED (RESOURCE_ALREADY_EXISTS). Set to true to
+      treat upload as upsert.
+    required: false
+    default: 'false'
   destination-path:
     description: 'Destination path (for storage-move, storage-copy)'
     required: false

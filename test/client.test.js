@@ -383,6 +383,100 @@ describe('SupabaseSdkClient input validation (no SDK calls)', () => {
   })
 })
 
+// ─────────────────── client method orchestration (focused) ───────────────────
+//
+// Most SDK orchestration lives in integration tests, but a few wrapping
+// rules are easier to lock down here with a minimal mock client:
+//   - rpc returns { data }, NOT { result }
+//   - query picks .range() when offset given, .limit() when only limit
+//   - applyFilter dispatches null shorthand to .is()
+//
+// We mutate client.client after construction to inject a chainable mock
+// instead of refactoring the whole class to take an injected client.
+
+function makeChainable(returnValue = { data: [], error: null }) {
+  const calls = []
+  const builder = new Proxy(
+    {},
+    {
+      get(_target, prop) {
+        if (prop === 'then') {
+          // Make the builder awaitable — yields whatever returnValue is.
+          return (onFulfilled) => Promise.resolve(returnValue).then(onFulfilled)
+        }
+        return (...args) => {
+          calls.push([prop, ...args])
+          return builder
+        }
+      },
+    },
+  )
+  return { builder, calls }
+}
+
+describe('SupabaseSdkClient orchestration (mocked SDK)', () => {
+  it('rpc returns { data: <value> }, not { result: <value> }', async () => {
+    const client = new SupabaseSdkClient({ url: TEST_URL, key: TEST_KEY })
+    const { builder } = makeChainable({ data: { row_count: 7 }, error: null })
+    client.client = {
+      schema: () => ({
+        rpc: () => builder,
+      }),
+    }
+    const result = await client.rpc({ name: 'tally', params: {} })
+    assert.deepEqual(result, { data: { row_count: 7 } })
+    assert.ok(
+      !('result' in result),
+      'rpc must not return { result } — unwrap step removed in Sprint 2',
+    )
+  })
+
+  it('query calls .range() when offset is given, .limit() when only limit', async () => {
+    const client = new SupabaseSdkClient({ url: TEST_URL, key: TEST_KEY })
+
+    // Case 1: offset + limit → .range(off, off+lim-1)
+    let { builder, calls } = makeChainable({ data: [], error: null })
+    client.client = { schema: () => ({ from: () => ({ select: () => builder }) }) }
+    await client.query({ table: 't', offset: '20', limit: '10' })
+    const rangeCall = calls.find((c) => c[0] === 'range')
+    const limitCall = calls.find((c) => c[0] === 'limit')
+    assert.deepEqual(rangeCall, ['range', 20, 29], 'offset+limit → range(20, 29)')
+    assert.equal(limitCall, undefined, 'offset+limit must NOT also call .limit()')
+
+    // Case 2: limit only → .limit()
+    ;({ builder, calls } = makeChainable({ data: [], error: null }))
+    client.client = { schema: () => ({ from: () => ({ select: () => builder }) }) }
+    await client.query({ table: 't', limit: '50' })
+    assert.deepEqual(
+      calls.find((c) => c[0] === 'limit'),
+      ['limit', 50],
+    )
+    assert.equal(
+      calls.find((c) => c[0] === 'range'),
+      undefined,
+    )
+  })
+
+  it('applyFilter dispatches { col: null } shorthand to .is(col, null)', () => {
+    const { builder, calls } = (() => {
+      const recorded = []
+      const b = {
+        is: (...args) => {
+          recorded.push(['is', ...args])
+          return b
+        },
+        eq: (...args) => {
+          recorded.push(['eq', ...args])
+          return b
+        },
+      }
+      return { builder: b, calls: recorded }
+    })()
+    applyFilter(builder, { deleted_at: null })
+    assert.deepEqual(calls, [['is', 'deleted_at', null]])
+  })
+})
+
 // ─────────────────── SupabaseError construction ───────────────────
 
 describe('SupabaseError', () => {

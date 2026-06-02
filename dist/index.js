@@ -52028,11 +52028,17 @@ class SupabaseSdkClient {
     let q = this.client.schema(schema).from(table).select(select)
     q = applyFilter(q, filter || {})
     q = applyOrder(q, order)
-    if (limit !== undefined && limit !== '') q = q.limit(Number(limit))
-    if (offset !== undefined && offset !== '') {
+    // Pick exactly one of .limit() or .range() — calling both produces
+    // confusing chained behavior depending on SDK internals. .range() is
+    // inclusive on both ends.
+    const hasOffset = offset !== undefined && offset !== ''
+    const hasLimit = limit !== undefined && limit !== ''
+    if (hasOffset) {
       const off = Number(offset)
-      const lim = limit !== undefined && limit !== '' ? Number(limit) : 1000
+      const lim = hasLimit ? Number(limit) : 1000
       q = q.range(off, off + lim - 1)
+    } else if (hasLimit) {
+      q = q.limit(Number(limit))
     }
     const { data, error } = await q
     if (error) throw translateError(error, 'QUERY_FAILED')
@@ -52104,7 +52110,10 @@ class SupabaseSdkClient {
     client_requireInput('rpc-name', name)
     const { data, error } = await this.client.schema(schema).rpc(name, params || {})
     if (error) throw translateError(error, 'RPC_FAILED')
-    return { result: data }
+    // Documented as { data: <function return value> } in w3-action.yaml.
+    // The handler wraps this in outputs.result automatically, so the
+    // workflow author sees fromJSON(result).data, not .result.result.
+    return { data }
   }
 
   // ──────────────────────────── Auth ────────────────────────────
@@ -52214,14 +52223,14 @@ class SupabaseSdkClient {
 
   // ───────────────────────────── Storage ─────────────────────────────
 
-  async storageUpload({ bucket, path, fileContentBase64, contentType }) {
+  async storageUpload({ bucket, path, fileContentBase64, contentType, upsert = false }) {
     client_requireInput('bucket', bucket)
     client_requireInput('path', path)
     client_requireInput('file-content', fileContentBase64)
     const bytes = external_node_buffer_namespaceObject.Buffer.from(fileContentBase64, 'base64')
     const { data, error } = await this.client.storage.from(bucket).upload(path, bytes, {
       contentType: contentType || 'application/octet-stream',
-      upsert: true,
+      upsert,
     })
     if (error) throw translateError(error, 'STORAGE_UPLOAD_FAILED')
     return { path: data.path, fullPath: data.fullPath, id: data.id }
@@ -52557,6 +52566,7 @@ const handlers = {
       path: getString('path', { required: true }),
       fileContentBase64: getString('file-content', { required: true }),
       contentType: getString('content-type', { defaultValue: 'application/octet-stream' }),
+      upsert: getBool('storage-upsert', false),
     })
     setJsonOutput('result', result)
   },
@@ -52633,9 +52643,20 @@ const handlers = {
 
   'invoke-function': async () => {
     const client = getClient()
+    // Edge Functions accept JSON or raw strings. If function-body parses
+    // as JSON, send the parsed object; otherwise send the raw string.
+    const rawBody = lib_core.getInput('function-body')
+    let body
+    if (rawBody !== '' && rawBody !== undefined) {
+      try {
+        body = JSON.parse(rawBody)
+      } catch {
+        body = rawBody
+      }
+    }
     const result = await client.invokeFunction({
       name: getString('function-name', { required: true }),
-      body: client_parseJsonInput('function-body', lib_core.getInput('function-body'), { allowEmpty: true }),
+      body,
       headers: client_parseJsonInput('function-headers', lib_core.getInput('function-headers'), {
         allowEmpty: true,
         defaultValue: {},
@@ -52658,6 +52679,10 @@ async function run() {
     }
   }
 }
+
+// Exported for unit tests — exercises the input-parsing layer without
+// running through the full router/SDK stack.
+
 
 ;// CONCATENATED MODULE: ./src/index.js
 /**
