@@ -7,7 +7,7 @@ repo: w3-io/w3-supabase-action
 description: >
   Connect W3 workflows to Supabase: Postgres queries (PostgREST), Auth
   (sign-in / JWT verification), Storage (uploads / signed URLs), and Edge
-  Functions. 22 commands across 4 subsystems behind a single uniform
+  Functions. 24 commands across 4 subsystems behind a single uniform
   command-router interface.
 
 context: >

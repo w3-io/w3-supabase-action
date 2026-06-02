@@ -186,7 +186,7 @@ describe('handlers', () => {
 
   it('exposes one handler per command in w3-action.yaml', () => {
     const declared = readManifestCommands()
-    assert.ok(declared.length >= 22, `expected >=22 commands, got ${declared.length}`)
+    assert.ok(declared.length >= 24, `expected >=24 commands, got ${declared.length}`)
     const missing = declared.filter((cmd) => typeof handlers[cmd] !== 'function')
     assert.deepEqual(missing, [], `commands missing handlers: ${missing.join(', ')}`)
   })
