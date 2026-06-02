@@ -5,10 +5,9 @@ name: Integration
 # PRs, and (b) it's slower and rate-limited.
 #
 # Triggers:
-#   - PRs that touch src/ or test/integration/ (label-gated to keep
-#     forked PRs out)
+#   - PRs that touch src/ or test/integration/ (forks are skipped —
+#     secrets aren't available there)
 #   - Manual dispatch
-#   - Nightly schedule to catch upstream SDK / Supabase regressions
 #
 # Required repo secrets:
 #   - SUPABASE_URL
@@ -19,10 +18,6 @@ name: Integration
 
 on:
   workflow_dispatch: {}
-  schedule:
-    # 06:17 UTC nightly — catches upstream regressions overnight
-    # without colliding with morning push traffic.
-    - cron: '17 6 * * *'
   pull_request:
     branches: [main]
     paths:
